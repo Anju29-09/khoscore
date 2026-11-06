@@ -168,18 +168,19 @@ h3.cathead .catname { flex: 1; }
 }
 .datechip b { color: var(--red); cursor: pointer; margin-left: 6px; }
 
-/* matches won, beside a team's name in a group */
+/* Matches won, out on the right of a team's row in a group. Deliberately loud:
+   it is the one number a referee scans the groups for. */
 .wins {
-  display: inline-block;
-  min-width: 22px;
+  flex: none;
+  min-width: 34px;
   text-align: center;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 800;
   color: #052e16;
   background: var(--green);
   border-radius: 999px;
-  padding: 2px 8px;
-  margin-left: 6px;
+  padding: 5px 13px;
+  box-shadow: 0 0 0 3px #22c55e33;
 }
 
 h3.cathead .catcount {

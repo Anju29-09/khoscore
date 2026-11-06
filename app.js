@@ -1125,10 +1125,10 @@ function groupCard(draw, group, gi, eligible, placed) {
 
     const wins = winsFor(draw, name);
 
-    // the tally only appears once there is something to show
-    row.innerHTML = `<div class="grow">🔹 ${esc(name)}`
-      + (wins ? ` <span class="wins">${wins}</span>` : '')
-      + `</div>`;
+    // the tally sits out on the right, away from the name, and only appears
+    // once there is something to show
+    row.innerHTML = `<div class="grow">🔹 ${esc(name)}</div>`
+      + (wins ? `<span class="wins" title="Matches won">${wins}</span>` : '');
 
     const out = document.createElement('button');
     out.className = 'red';
