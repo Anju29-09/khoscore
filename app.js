@@ -966,6 +966,22 @@ function saveOpenDraw(draw) {
 /** Group A, Group B, … by position, so removing one renames the rest. */
 const groupName = i => 'Group ' + String.fromCharCode(65 + i);
 
+/**
+ * How many saved matches a team has won, counting only this draw's own side and
+ * age group, so a Men Open draw never picks up a U17 or Women result. Drawn
+ * matches count for nobody.
+ */
+function winsFor(draw, teamName) {
+  const name = (teamName || '').toLowerCase();
+
+  return Matches.all().filter(m =>
+    (m.teamType || 'Men') === draw.teamType
+    && (m.category || 'Open') === draw.category
+    && !isDraw(m)
+    && (m.winner || '').toLowerCase() === name
+  ).length;
+}
+
 $('#ddAddGroupBtn').onclick = () => {
   const draw = openDraw();
   if (!draw) return;
@@ -1031,7 +1047,13 @@ function groupCard(draw, group, gi, eligible, placed) {
   (group.teams || []).forEach(name => {
     const row = document.createElement('div');
     row.className = 'listrow';
-    row.innerHTML = `<div class="grow">🔹 ${esc(name)}</div>`;
+
+    const wins = winsFor(draw, name);
+
+    // the tally only appears once there is something to show
+    row.innerHTML = `<div class="grow">🔹 ${esc(name)}`
+      + (wins ? ` <span class="wins">${wins}</span>` : '')
+      + `</div>`;
 
     const out = document.createElement('button');
     out.className = 'red';
