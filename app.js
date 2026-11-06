@@ -917,10 +917,180 @@ $('#saveDrawBtn').onclick = () => {
   renderDraws();
 };
 
+/* ---------------- one draw: groups and the bracket ---------------- */
+
+let openDrawId = null;
+
 function showDraw(draw) {
+  openDrawId = draw.id;
+
   $('#ddName').textContent = draw.tournament;
   $('#ddMeta').textContent = `${draw.date}   •   ${draw.teamType} ${draw.category}`;
+
+  showDrawTab('groups');
   go('drawdetail');
+}
+
+function showDrawTab(which) {
+  const groups = which === 'groups';
+
+  $('#ddGroupsView').style.display = groups ? '' : 'none';
+  $('#ddDrawView').style.display = groups ? 'none' : '';
+
+  $('#ddGroupsTab').className = groups ? 'green' : 'grey';
+  $('#ddDrawTab').className = groups ? 'grey' : 'green';
+
+  if (groups) renderGroups();
+}
+
+$('#ddGroupsTab').onclick = () => showDrawTab('groups');
+$('#ddDrawTab').onclick = () => showDrawTab('draw');
+
+/** The draw being looked at, read fresh so edits are never made to a stale copy. */
+function openDraw() {
+  return Draws.byId(openDrawId);
+}
+
+/** Writes a change back to the stored list. */
+function saveOpenDraw(draw) {
+  const list = Draws.all();
+  const i = list.findIndex(d => d.id === draw.id);
+
+  if (i === -1) { toast('That draw is no longer saved', 3500); return false; }
+
+  list[i] = draw;
+  Draws.save(list);
+  return true;
+}
+
+/** Group A, Group B, … by position, so removing one renames the rest. */
+const groupName = i => 'Group ' + String.fromCharCode(65 + i);
+
+$('#ddAddGroupBtn').onclick = () => {
+  const draw = openDraw();
+  if (!draw) return;
+
+  draw.groups = draw.groups || [];
+
+  if (draw.groups.length >= 26) { toast('That is as many groups as the letters allow'); return; }
+
+  draw.groups.push({ teams: [] });
+
+  if (saveOpenDraw(draw)) renderGroups();
+};
+
+function renderGroups() {
+  const draw = openDraw();
+  const box = $('#ddGroups');
+
+  box.innerHTML = '';
+  if (!draw) return;
+
+  const groups = draw.groups || [];
+
+  if (!groups.length) {
+    box.innerHTML = '<div class="card empty">No groups yet — add one to start placing teams</div>';
+    return;
+  }
+
+  // only this draw's own side and age group, and only teams not already placed
+  const eligible = Teams.all().filter(t =>
+    (t.teamType || 'Men') === draw.teamType && (t.category || 'Open') === draw.category);
+
+  const placed = new Set();
+  groups.forEach(g => (g.teams || []).forEach(n => placed.add(n)));
+
+  groups.forEach((group, gi) => box.appendChild(groupCard(draw, group, gi, eligible, placed)));
+}
+
+function groupCard(draw, group, gi, eligible, placed) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const head = document.createElement('div');
+  head.className = 'listrow';
+  head.innerHTML = `<div class="grow"><h2 style="margin:0">${groupName(gi)}</h2></div>`;
+
+  const kill = document.createElement('button');
+  kill.className = 'red';
+  kill.textContent = '🗑';
+  kill.onclick = async () => {
+    if (await ask('Delete Group', `Delete ${groupName(gi)}?`, { yes: 'Delete' }) !== 'yes') return;
+
+    const d = openDraw();
+    if (!d) return;
+
+    d.groups.splice(gi, 1);
+    if (saveOpenDraw(d)) { toast('Group deleted'); renderGroups(); }
+  };
+
+  head.appendChild(kill);
+  card.appendChild(head);
+
+  // teams already in this group
+  (group.teams || []).forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'listrow';
+    row.innerHTML = `<div class="grow">🔹 ${esc(name)}</div>`;
+
+    const out = document.createElement('button');
+    out.className = 'red';
+    out.textContent = '✕';
+    out.onclick = () => {
+      const d = openDraw();
+      if (!d) return;
+
+      d.groups[gi].teams = d.groups[gi].teams.filter(n => n !== name);
+      if (saveOpenDraw(d)) renderGroups();
+    };
+
+    row.appendChild(out);
+    card.appendChild(row);
+  });
+
+  // what is left to pick from
+  const free = eligible.filter(t => !placed.has(t.teamName));
+
+  if (!eligible.length) {
+    const none = document.createElement('div');
+    none.className = 'empty';
+    none.textContent = `No ${draw.teamType} ${draw.category} teams are registered yet`;
+    card.appendChild(none);
+    return card;
+  }
+
+  if (!free.length) {
+    const none = document.createElement('div');
+    none.className = 'empty';
+    none.textContent = 'Every registered team is already in a group';
+    card.appendChild(none);
+    return card;
+  }
+
+  const picker = document.createElement('div');
+  picker.className = 'field';
+  picker.style.marginTop = '10px';
+
+  const select = document.createElement('select');
+  select.innerHTML = '<option value="">Select a team…</option>'
+    + free.map(t => `<option value="${esc(t.teamName)}">${esc(t.teamName)}</option>`).join('');
+
+  // picking from the list is the whole action; no separate Add button to forget
+  select.onchange = () => {
+    const name = select.value;
+    if (!name) return;
+
+    const d = openDraw();
+    if (!d) return;
+
+    d.groups[gi].teams = (d.groups[gi].teams || []).concat(name);
+    if (saveOpenDraw(d)) renderGroups();
+  };
+
+  picker.appendChild(select);
+  card.appendChild(picker);
+
+  return card;
 }
 
 /* ============================================================

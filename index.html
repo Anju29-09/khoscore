@@ -266,8 +266,18 @@
   <h1 id="ddName">Draw</h1>
   <p class="sub" id="ddMeta"></p>
 
-  <div class="card empty" id="ddBody">
-    Nothing in this draw yet.
+  <div class="row" style="margin-bottom:16px">
+    <button id="ddGroupsTab" class="green">👥 Groups</button>
+    <button id="ddDrawTab" class="grey">🏆 Draw</button>
+  </div>
+
+  <div id="ddGroupsView">
+    <button id="ddAddGroupBtn" style="margin-bottom:14px">➕ Add Group</button>
+    <div id="ddGroups"></div>
+  </div>
+
+  <div id="ddDrawView" style="display:none">
+    <div class="card empty">The draw is not set up yet.</div>
   </div>
 </section>
 
