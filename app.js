@@ -76,6 +76,16 @@ const Matches = {
   add(m) { const l = this.all(); l.push(m); this.save(l); }
 };
 
+/**
+ * Tournament draws. Each carries an id of its own, because two draws can easily
+ * share a tournament name, a date, a side and an age group.
+ */
+const Draws = {
+  all: () => DB.read('draws', []),
+  save: list => DB.write('draws', list),
+  byId(id) { return this.all().find(d => d.id === id) || null; }
+};
+
 /* ============================================================
    SMALL UI HELPERS
    ============================================================ */
@@ -229,6 +239,7 @@ window.addEventListener('popstate', () => {
 const SCREEN_ENTER = {
   home: renderHome,
   teams: renderTeams,
+  draws: renderDraws,
   sheets: renderSheets
 };
 
@@ -826,6 +837,91 @@ $('#toScoringBtn').onclick = () => {
 
   Scoring.start(pendingSetup, perm1.slice(), perm2.slice());
 };
+
+/* ============================================================
+   DRAWS
+
+   A draw is a tournament's bracket. For now it holds only what identifies it —
+   the date, the side, the age group and the tournament name — and opens onto a
+   screen of its own.
+   ============================================================ */
+
+function renderDraws() {
+  const all = Draws.all();
+  const box = $('#drawList');
+
+  $('#drawTotal').textContent = `Total Draws : ${all.length}`;
+
+  box.innerHTML = '';
+
+  if (!all.length) {
+    box.innerHTML = '<div class="card empty">No draws yet</div>';
+    return;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  // newest first, the same way the score sheets are listed
+  for (let i = all.length - 1; i >= 0; i--) {
+    const d = all[i];
+
+    const row = document.createElement('div');
+    row.className = 'listrow';
+    row.innerHTML = `
+      <div class="grow pick">
+        <div class="name">${esc(d.tournament)}</div>
+        <div class="meta">${esc(d.date || 'No Date')} • ${esc(d.teamType)} ${esc(d.category)}</div>
+      </div>`;
+
+    row.querySelector('.grow').onclick = () => showDraw(d);
+
+    const del = document.createElement('button');
+    del.className = 'red';
+    del.textContent = '🗑';
+    del.onclick = async () => {
+      if (await ask('Delete Draw', `Delete ${d.tournament}?`, { yes: 'Delete' }) !== 'yes') return;
+      Draws.save(Draws.all().filter(x => x.id !== d.id));
+      toast('Draw Deleted');
+      renderDraws();
+    };
+
+    row.appendChild(del);
+    card.appendChild(row);
+  }
+
+  box.appendChild(card);
+}
+
+$('#saveDrawBtn').onclick = () => {
+  const iso = $('#drawDate').value;
+  if (!iso) { toast('Pick a date'); return; }
+
+  const name = $('#drawName').value.trim();
+  if (!name) { toast('Enter the tournament name'); return; }
+
+  const list = Draws.all();
+
+  list.push({
+    id: 'd' + Date.now() + Math.random().toString(36).slice(2, 7),
+    date: isoToDisplay(iso),
+    teamType: $('input[name=drawType]:checked').value,
+    category: $('input[name=drawCat]:checked').value,
+    tournament: name
+  });
+
+  Draws.save(list);
+
+  $('#drawName').value = '';
+  toast('Draw Saved');
+  renderDraws();
+};
+
+function showDraw(draw) {
+  $('#ddName').textContent = draw.tournament;
+  $('#ddMeta').textContent = `${draw.date}   •   ${draw.teamType} ${draw.category}`;
+  go('drawdetail');
+}
 
 /* ============================================================
    SCORE SHEETS

@@ -35,6 +35,7 @@
     <button id="resumeBtn" class="amber" style="display:none">⏱ Resume Live Match</button>
     <button data-go="register">🏃 Register Team</button>
     <button data-go="teams">👥 Registered Teams</button>
+    <button data-go="draws">🗂 Draws</button>
     <button id="startMatchBtn">🔥 Start Match</button>
     <button data-go="sheets">📄 Score Sheets</button>
   </div>
@@ -217,6 +218,57 @@
   </div>
 
   <button id="toScoringBtn" class="green big">Start Scoring</button>
+</section>
+
+<!-- ============ DRAWS ============ -->
+<section id="s-draws" class="screen">
+  <button class="grey" data-back>← Back</button>
+  <h1>🗂 Draws</h1>
+  <p class="sub" id="drawTotal">Total Draws : 0</p>
+
+  <div class="card">
+    <h2>New Draw</h2>
+
+    <div class="field">
+      <label class="cap">Date</label>
+      <input type="date" id="drawDate">
+    </div>
+
+    <div class="field">
+      <label class="cap">Type</label>
+      <label class="opt"><input type="radio" name="drawType" value="Men" checked>Men</label>
+      <label class="opt"><input type="radio" name="drawType" value="Women">Women</label>
+    </div>
+
+    <div class="field">
+      <label class="cap">Category</label>
+      <label class="opt"><input type="radio" name="drawCat" value="U14">U14</label>
+      <label class="opt"><input type="radio" name="drawCat" value="U17">U17</label>
+      <label class="opt"><input type="radio" name="drawCat" value="U18">U18</label>
+      <label class="opt"><input type="radio" name="drawCat" value="U19">U19</label>
+      <label class="opt"><input type="radio" name="drawCat" value="Open" checked>Open</label>
+    </div>
+
+    <div class="field">
+      <label class="cap">Tournament</label>
+      <input type="text" id="drawName" placeholder="Enter Tournament Name">
+    </div>
+
+    <button id="saveDrawBtn" class="green big">SAVE DRAW</button>
+  </div>
+
+  <div id="drawList"></div>
+</section>
+
+<!-- ============ ONE DRAW ============ -->
+<section id="s-drawdetail" class="screen">
+  <button class="grey" data-back>← Back</button>
+  <h1 id="ddName">Draw</h1>
+  <p class="sub" id="ddMeta"></p>
+
+  <div class="card empty" id="ddBody">
+    Nothing in this draw yet.
+  </div>
 </section>
 
 <!-- ============ SCORING ============ -->
