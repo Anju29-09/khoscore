@@ -1059,13 +1059,8 @@ function groupCard(draw, group, gi, eligible, placed) {
     return card;
   }
 
-  if (!free.length) {
-    const none = document.createElement('div');
-    none.className = 'empty';
-    none.textContent = 'Every registered team is already in a group';
-    card.appendChild(none);
-    return card;
-  }
+  // nothing left to pick: the group simply shows what it holds, with no dropdown
+  if (!free.length) return card;
 
   const picker = document.createElement('div');
   picker.className = 'field';
