@@ -168,6 +168,14 @@ h3.cathead .catname { flex: 1; }
 }
 .datechip b { color: var(--red); cursor: pointer; margin-left: 6px; }
 
+/* the bracket */
+.through { color: var(--green); font-weight: 800; }
+.listrow .pick.picked {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  background: #06b6d41a;
+}
+
 /* the tick that sends a team through to the draw */
 input.qual {
   flex: none;

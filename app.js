@@ -1028,6 +1028,90 @@ function qualifiedTeams(draw) {
   return out;
 }
 
+/* ---------------- the knockout bracket ---------------- */
+
+const sameName = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
+
+/**
+ * The result that settles a tie, taken from the score sheets: the latest match
+ * between the two, on one of the tournament's days and in its own side and age
+ * group. Null while they have not played.
+ */
+function matchBetween(draw, a, b) {
+  const days = new Set(drawDates(draw).map(dateKey));
+
+  const played = Matches.all().filter(m =>
+    days.has(dateKey(m.date))
+    && (m.teamType || 'Men') === draw.teamType
+    && (m.category || 'Open') === draw.category
+    && !isDraw(m)
+    && ((sameName(m.team1Name, a) && sameName(m.team2Name, b))
+      || (sameName(m.team1Name, b) && sameName(m.team2Name, a))));
+
+  return played.length ? played[played.length - 1] : null;
+}
+
+/** Who goes through from one tie: the bye, the winner, or nobody yet. */
+function tieWinner(draw, tie) {
+  if (!tie.b) return tie.a;                       // a bye walks through
+
+  const m = matchBetween(draw, tie.a, tie.b);
+  return m ? m.winner : null;
+}
+
+/**
+ * Every round. The first is the one the referee made by hand; each round after
+ * is paired from the winners in order, so the top two meet, then the next two,
+ * and an odd team left over takes a bye.
+ */
+function bracketRounds(draw) {
+  const rounds = [];
+
+  let ties = (draw.bracket || []).slice();
+  if (!ties.length) return rounds;
+
+  rounds.push(ties);
+
+  for (let guard = 0; guard < 12; guard++) {
+
+    const winners = ties.map(t => tieWinner(draw, t));
+
+    if (winners.some(w => !w)) break;             // this round is still being played
+    if (winners.length <= 1) break;               // somebody has won the thing
+
+    const next = [];
+    for (let i = 0; i < winners.length; i += 2) {
+      next.push({ a: winners[i], b: winners[i + 1] || null });
+    }
+
+    rounds.push(next);
+    ties = next;
+  }
+
+  return rounds;
+}
+
+/**
+ * Named by how many teams are in it, which is how a tournament reads. While the
+ * first round is still being built, `teamsOverride` keeps it named for the whole
+ * field rather than the handful paired up so far.
+ */
+function roundTitle(ties, index, teamsOverride) {
+  const teams = teamsOverride != null
+    ? teamsOverride
+    : ties.reduce((n, t) => n + (t.b ? 2 : 1), 0);
+
+  if (teams <= 2) return 'Final';
+  if (teams <= 4) return 'Semi Final';
+  if (teams <= 8) return 'Quarter Final';
+  if (teams <= 16) return 'Pre-Quarter';
+
+  return 'Round ' + (index + 1);
+}
+
+/** The team picked first while building a tie, if any. */
+let pairPick = null;
+
 function renderDrawTab() {
   const draw = openDraw();
   const box = $('#ddDrawView');
@@ -1035,7 +1119,7 @@ function renderDrawTab() {
   box.innerHTML = '';
   if (!draw) return;
 
-  const through = qualifiedTeams(draw);
+  const through = qualifiedTeams(draw).map(t => t.name);
 
   if (!through.length) {
     box.innerHTML = '<div class="card empty">Tick the teams going through '
@@ -1043,19 +1127,139 @@ function renderDrawTab() {
     return;
   }
 
+  // anyone not yet placed in a tie
+  const placed = new Set();
+  (draw.bracket || []).forEach(t => { placed.add(t.a); if (t.b) placed.add(t.b); });
+
+  const waiting = through.filter(n => !placed.has(n));
+
+  // Later rounds and a champion only make sense once the whole field is drawn.
+  // Half a first round would otherwise crown whoever happened to get a bye.
+  const rounds = waiting.length ? [(draw.bracket || [])] : bracketRounds(draw);
+
+  rounds.forEach((ties, r) => {
+    if (!ties.length) return;
+    box.appendChild(roundCard(draw, ties, r, r === 0 ? through.length : null));
+  });
+
+  if (waiting.length) {
+    box.appendChild(pairingCard(draw, waiting));
+    return;
+  }
+
+  // the champion, once the last round has one winner left
+  const last = rounds[rounds.length - 1];
+
+  if (last && last.length === 1) {
+    const champion = tieWinner(draw, last[0]);
+
+    if (champion) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<h2>🏆 Winner</h2>`
+        + `<div class="listrow"><div class="grow">`
+        + `<div class="name">${esc(champion)}</div></div></div>`;
+      box.appendChild(card);
+    }
+  }
+}
+
+function roundCard(draw, ties, index, teamsOverride) {
   const card = document.createElement('div');
   card.className = 'card';
-  card.innerHTML = `<h2>Through to the draw — ${through.length}</h2>`;
+  card.innerHTML = `<h2>${roundTitle(ties, index, teamsOverride)}</h2>`;
 
-  through.forEach(t => {
+  ties.forEach((tie, ti) => {
+    const won = tieWinner(draw, tie);
+
     const row = document.createElement('div');
     row.className = 'listrow';
-    row.innerHTML = `<div class="grow"><div class="name">${esc(t.name)}</div>`
-      + `<div class="meta">${t.group}</div></div>`;
+
+    const label = tie.b
+      ? `<span class="${won && sameName(won, tie.a) ? 'through' : ''}">${esc(tie.a)}</span>`
+        + ` <span class="muted">vs</span> `
+        + `<span class="${won && sameName(won, tie.b) ? 'through' : ''}">${esc(tie.b)}</span>`
+      : `<span class="through">${esc(tie.a)}</span>`;
+
+    const under = tie.b
+      ? (won ? `${esc(won)} goes through` : 'Waiting for the result')
+      : 'Bye';
+
+    row.innerHTML = `<div class="grow"><div class="name">${label}</div>`
+      + `<div class="meta">${under}</div></div>`;
+
+    // only the round the referee made by hand can be unpicked
+    if (index === 0) {
+      const undo = document.createElement('button');
+      undo.className = 'red';
+      undo.textContent = '✕';
+      undo.onclick = () => {
+        const d = openDraw();
+        if (!d) return;
+
+        d.bracket.splice(ti, 1);
+        if (saveOpenDraw(d)) renderDrawTab();
+      };
+      row.appendChild(undo);
+    }
+
     card.appendChild(row);
   });
 
-  box.appendChild(card);
+  return card;
+}
+
+function pairingCard(draw, waiting) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  card.innerHTML = `<h2>Teams to pair</h2>`
+    + `<p class="muted" style="margin-top:-6px">Tap two teams to put them together, `
+    + `or give one a bye.</p>`;
+
+  waiting.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'listrow';
+
+    const pick = document.createElement('div');
+    pick.className = 'grow pick';
+    pick.innerHTML = `<div class="name">${esc(name)}</div>`;
+
+    if (pairPick === name) pick.classList.add('picked');
+
+    pick.onclick = () => {
+      if (pairPick === name) { pairPick = null; renderDrawTab(); return; }
+
+      if (!pairPick) { pairPick = name; renderDrawTab(); return; }
+
+      const d = openDraw();
+      if (!d) return;
+
+      d.bracket = (d.bracket || []).concat({ a: pairPick, b: name });
+      pairPick = null;
+
+      if (saveOpenDraw(d)) renderDrawTab();
+    };
+
+    const bye = document.createElement('button');
+    bye.className = 'amber';
+    bye.textContent = 'Bye';
+    bye.onclick = () => {
+      const d = openDraw();
+      if (!d) return;
+
+      d.bracket = (d.bracket || []).concat({ a: name, b: null });
+      pairPick = null;
+
+      if (saveOpenDraw(d)) renderDrawTab();
+    };
+
+    row.appendChild(pick);
+    row.appendChild(bye);
+    card.appendChild(row);
+  });
+
+  return card;
 }
 
 $('#ddGroupsTab').onclick = () => showDrawTab('groups');
