@@ -168,6 +168,15 @@ h3.cathead .catname { flex: 1; }
 }
 .datechip b { color: var(--red); cursor: pointer; margin-left: 6px; }
 
+/* the tick that sends a team through to the draw */
+input.qual {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
 /* Matches won, out on the right of a team's row in a group. Deliberately loud:
    it is the one number a referee scans the groups for. */
 .wins {

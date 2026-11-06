@@ -1012,7 +1012,50 @@ function showDrawTab(which) {
   $('#ddGroupsTab').className = groups ? 'green' : 'grey';
   $('#ddDrawTab').className = groups ? 'grey' : 'green';
 
-  if (groups) renderGroups();
+  if (groups) renderGroups(); else renderDrawTab();
+}
+
+/** The teams ticked in each group, in group order. */
+function qualifiedTeams(draw) {
+  const out = [];
+
+  (draw.groups || []).forEach((g, gi) => {
+    (g.teams || []).forEach(name => {
+      if ((g.qualified || []).includes(name)) out.push({ group: groupName(gi), name });
+    });
+  });
+
+  return out;
+}
+
+function renderDrawTab() {
+  const draw = openDraw();
+  const box = $('#ddDrawView');
+
+  box.innerHTML = '';
+  if (!draw) return;
+
+  const through = qualifiedTeams(draw);
+
+  if (!through.length) {
+    box.innerHTML = '<div class="card empty">Tick the teams going through '
+      + 'on the Groups tab and they appear here</div>';
+    return;
+  }
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<h2>Through to the draw — ${through.length}</h2>`;
+
+  through.forEach(t => {
+    const row = document.createElement('div');
+    row.className = 'listrow';
+    row.innerHTML = `<div class="grow"><div class="name">${esc(t.name)}</div>`
+      + `<div class="meta">${t.group}</div></div>`;
+    card.appendChild(row);
+  });
+
+  box.appendChild(card);
 }
 
 $('#ddGroupsTab').onclick = () => showDrawTab('groups');
@@ -1125,10 +1168,33 @@ function groupCard(draw, group, gi, eligible, placed) {
 
     const wins = winsFor(draw, name);
 
+    // ticking a team sends it through to the draw
+    const tick = document.createElement('input');
+    tick.type = 'checkbox';
+    tick.className = 'qual';
+    tick.title = 'Goes through to the draw';
+    tick.checked = (group.qualified || []).includes(name);
+
+    tick.onchange = () => {
+      const d = openDraw();
+      if (!d) return;
+
+      const g = d.groups[gi];
+      const on = new Set(g.qualified || []);
+
+      if (tick.checked) on.add(name); else on.delete(name);
+
+      g.qualified = [...on];
+      saveOpenDraw(d);
+    };
+
+    row.appendChild(tick);
+
     // the tally sits out on the right, away from the name, and only appears
     // once there is something to show
-    row.innerHTML = `<div class="grow">🔹 ${esc(name)}</div>`
-      + (wins ? `<span class="wins" title="Matches won">${wins}</span>` : '');
+    row.insertAdjacentHTML('beforeend',
+      `<div class="grow">🔹 ${esc(name)}</div>`
+      + (wins ? `<span class="wins" title="Matches won">${wins}</span>` : ''));
 
     const out = document.createElement('button');
     out.className = 'red';
@@ -1137,7 +1203,10 @@ function groupCard(draw, group, gi, eligible, placed) {
       const d = openDraw();
       if (!d) return;
 
+      // a team taken out of the group must not stay in the draw
       d.groups[gi].teams = d.groups[gi].teams.filter(n => n !== name);
+      d.groups[gi].qualified = (d.groups[gi].qualified || []).filter(n => n !== name);
+
       if (saveOpenDraw(d)) renderGroups();
     };
 
