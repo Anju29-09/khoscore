@@ -846,7 +846,72 @@ $('#toScoringBtn').onclick = () => {
    screen of its own.
    ============================================================ */
 
+/**
+ * The days a tournament runs over. Draws saved when one date was all a draw could
+ * hold still read correctly.
+ */
+function drawDates(draw) {
+  if (Array.isArray(draw.dates) && draw.dates.length) return draw.dates;
+  return draw.date ? [draw.date] : [];
+}
+
+/** "3 / 12 / 2026" and "03/12/2026" are the same day. */
+function dateKey(value) {
+  const parts = String(value == null ? '' : value).split('/').map(p => parseInt(p, 10));
+
+  return parts.length === 3 && parts.every(n => !isNaN(n))
+    ? parts.join('-')
+    : String(value == null ? '' : value).trim();
+}
+
+/* Dates being collected on the New Draw form, before it is saved. */
+let pendingDates = [];
+
+function renderPendingDates() {
+  const box = $('#drawDateList');
+  box.innerHTML = '';
+
+  if (!pendingDates.length) {
+    box.innerHTML = '<span class="muted">No dates added yet</span>';
+    return;
+  }
+
+  pendingDates.forEach((d, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'datechip';
+    chip.innerHTML = `${esc(d)} <b>✕</b>`;
+
+    chip.querySelector('b').onclick = () => {
+      pendingDates.splice(i, 1);
+      renderPendingDates();
+    };
+
+    box.appendChild(chip);
+  });
+}
+
+$('#addDateBtn').onclick = () => {
+  const iso = $('#drawDate').value;
+  if (!iso) { toast('Pick a date first'); return; }
+
+  const shown = isoToDisplay(iso);
+
+  if (pendingDates.some(d => dateKey(d) === dateKey(shown))) {
+    toast('That date is already on the list');
+    return;
+  }
+
+  pendingDates.push(shown);
+  pendingDates.sort((a, b) => new Date(dateKey(a).split('-').reverse().join('-'))
+    - new Date(dateKey(b).split('-').reverse().join('-')));
+
+  $('#drawDate').value = '';
+  renderPendingDates();
+};
+
 function renderDraws() {
+  renderPendingDates();
+
   const all = Draws.all();
   const box = $('#drawList');
 
@@ -871,7 +936,7 @@ function renderDraws() {
     row.innerHTML = `
       <div class="grow pick">
         <div class="name">${esc(d.tournament)}</div>
-        <div class="meta">${esc(d.date || 'No Date')} • ${esc(d.teamType)} ${esc(d.category)}</div>
+        <div class="meta">${esc(drawDates(d).join(',  ') || 'No Date')} • ${esc(d.teamType)} ${esc(d.category)}</div>
       </div>`;
 
     row.querySelector('.grow').onclick = () => showDraw(d);
@@ -894,8 +959,11 @@ function renderDraws() {
 }
 
 $('#saveDrawBtn').onclick = () => {
-  const iso = $('#drawDate').value;
-  if (!iso) { toast('Pick a date'); return; }
+
+  // a date left sitting in the picker is almost certainly meant to be included
+  if ($('#drawDate').value) $('#addDateBtn').onclick();
+
+  if (!pendingDates.length) { toast('Add at least one date'); return; }
 
   const name = $('#drawName').value.trim();
   if (!name) { toast('Enter the tournament name'); return; }
@@ -904,7 +972,7 @@ $('#saveDrawBtn').onclick = () => {
 
   list.push({
     id: 'd' + Date.now() + Math.random().toString(36).slice(2, 7),
-    date: isoToDisplay(iso),
+    dates: pendingDates.slice(),
     teamType: $('input[name=drawType]:checked').value,
     category: $('input[name=drawCat]:checked').value,
     tournament: name
@@ -912,7 +980,10 @@ $('#saveDrawBtn').onclick = () => {
 
   Draws.save(list);
 
+  pendingDates = [];
   $('#drawName').value = '';
+  $('#drawDate').value = '';
+
   toast('Draw Saved');
   renderDraws();
 };
@@ -925,7 +996,8 @@ function showDraw(draw) {
   openDrawId = draw.id;
 
   $('#ddName').textContent = draw.tournament;
-  $('#ddMeta').textContent = `${draw.date}   •   ${draw.teamType} ${draw.category}`;
+  $('#ddMeta').textContent =
+    `${drawDates(draw).join(',  ')}   •   ${draw.teamType} ${draw.category}`;
 
   showDrawTab('groups');
   go('drawdetail');
@@ -967,15 +1039,18 @@ function saveOpenDraw(draw) {
 const groupName = i => 'Group ' + String.fromCharCode(65 + i);
 
 /**
- * How many saved matches a team has won, counting only this draw's own side and
- * age group, so a Men Open draw never picks up a U17 or Women result. Drawn
+ * How many matches a team won during this tournament: only matches played on one
+ * of the draw's own dates, and only in its own side and age group. A result from
+ * another day, another category or last season's cup is somebody else's. Drawn
  * matches count for nobody.
  */
 function winsFor(draw, teamName) {
   const name = (teamName || '').toLowerCase();
+  const days = new Set(drawDates(draw).map(dateKey));
 
   return Matches.all().filter(m =>
-    (m.teamType || 'Men') === draw.teamType
+    days.has(dateKey(m.date))
+    && (m.teamType || 'Men') === draw.teamType
     && (m.category || 'Open') === draw.category
     && !isDraw(m)
     && (m.winner || '').toLowerCase() === name

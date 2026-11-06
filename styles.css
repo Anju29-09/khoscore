@@ -155,6 +155,19 @@ h3.cathead {
 h3.cathead:hover { background: #ffffff14; }
 h3.cathead .arrow { font-size: 14px; width: 14px; }
 h3.cathead .catname { flex: 1; }
+/* one of a tournament's dates, on the New Draw form */
+.datechip {
+  display: inline-block;
+  margin: 0 8px 8px 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #ffffff14;
+  border: 1px solid #ffffff22;
+  font-weight: 600;
+  font-size: 14px;
+}
+.datechip b { color: var(--red); cursor: pointer; margin-left: 6px; }
+
 /* matches won, beside a team's name in a group */
 .wins {
   display: inline-block;
