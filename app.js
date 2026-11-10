@@ -36,6 +36,37 @@ const DB = {
 };
 
 /**
+ * Permanent tags.
+ *
+ * A record's place in the list is not its identity. Two phones both have a third
+ * match and they are different matches, so anything that has to survive leaving
+ * this device carries a tag of its own instead. The tag is never shown to anyone;
+ * it only lets two devices agree on which record they are both talking about.
+ */
+const Ids = {
+
+  make(prefix) {
+    const r = () => Math.random().toString(36).slice(2, 7);
+    return prefix + '-' + Date.now().toString(36) + '-' + r() + r();
+  },
+
+  /** Tags anything in the list that has none, and hands the list back. */
+  stamp(list, prefix) {
+    if (Array.isArray(list)) {
+      for (const rec of list) {
+        if (rec && typeof rec === 'object' && !rec.id) rec.id = Ids.make(prefix);
+      }
+    }
+    return list;
+  },
+
+  /** True when at least one record is still untagged. */
+  untagged(list) {
+    return Array.isArray(list) && list.some(r => r && typeof r === 'object' && !r.id);
+  }
+};
+
+/**
  * A team is identified by its name together with its side and age group, not by the
  * name alone: one club fields a men's and a women's side, and one per age group, all
  * under the same name.
@@ -48,7 +79,7 @@ function sameTeam(a, b) {
 
 const Teams = {
   all: () => DB.read('teams', []),
-  save: list => DB.write('teams', list),
+  save: list => DB.write('teams', Ids.stamp(list, 't')),
 
   /**
    * Looks a team up for matches saved before squads were stored. Names repeat, so
@@ -72,8 +103,9 @@ const Teams = {
 
 const Matches = {
   all: () => DB.read('matches', []),
-  save: list => DB.write('matches', list),
-  add(m) { const l = this.all(); l.push(m); this.save(l); }
+  save: list => DB.write('matches', Ids.stamp(list, 'm')),
+  add(m) { const l = this.all(); l.push(m); this.save(l); },
+  byId(id) { return id ? this.all().find(m => m.id === id) || null : null; }
 };
 
 /**
@@ -82,9 +114,25 @@ const Matches = {
  */
 const Draws = {
   all: () => DB.read('draws', []),
-  save: list => DB.write('draws', list),
+  save: list => DB.write('draws', Ids.stamp(list, 'd')),
   byId(id) { return this.all().find(d => d.id === id) || null; }
 };
+
+/**
+ * Teams and score sheets saved before tags existed are tagged once, here, the
+ * first time the app opens after the update. Nothing else about them changes and
+ * nothing is lost. Draws have carried a tag since the day they were added.
+ */
+(function tagOlderRecords() {
+  const teams = Teams.all();
+  if (Ids.untagged(teams)) Teams.save(teams);
+
+  const matches = Matches.all();
+  if (Ids.untagged(matches)) Matches.save(matches);
+
+  const draws = Draws.all();
+  if (Ids.untagged(draws)) Draws.save(draws);
+})();
 
 /* ============================================================
    SMALL UI HELPERS
@@ -452,6 +500,10 @@ $('#saveTeamBtn').onclick = () => {
     const i = list.findIndex(t => sameTeam(t, editingTeam));
 
     if (i === -1) { toast('That team is no longer registered', 3500); return; }
+
+    // an edited team is the same team: it keeps its tag, or another device would
+    // read the rename as a second team rather than a change to this one
+    entry.id = list[i].id || editingTeam.id;
 
     list[i] = entry;
     Teams.save(list);
@@ -1109,6 +1161,35 @@ function roundTitle(ties, index, teamsOverride) {
   return 'Round ' + (index + 1);
 }
 
+/**
+ * Draw numbers.
+ *
+ * The first round fixes them: 1, 2, 3 ... in the order the referee pairs the
+ * teams up, so the sheet reads 1 vs 2, then 3 vs 4. A team keeps its number for
+ * the whole tournament, so the quarter final reads "1. Mumbai vs 4. Thane" and
+ * anyone can follow a side through the rounds by its number alone.
+ */
+function drawNumbers(draw) {
+  const numbers = new Map();
+  let next = 0;
+
+  (draw.bracket || []).forEach(tie => {
+    if (tie.a && !numbers.has(tie.a)) numbers.set(tie.a, ++next);
+    if (tie.b && !numbers.has(tie.b)) numbers.set(tie.b, ++next);
+  });
+
+  return numbers;
+}
+
+/**
+ * "1. Mumbai", or the bare name while a team is still waiting to be paired and
+ * has no number yet. Escaped, so it can go straight into the page.
+ */
+function numbered(numbers, name) {
+  const n = numbers.get(name);
+  return (n ? `<span class="seed">${n}</span>` : '') + esc(name);
+}
+
 /** The team picked first while building a tie, if any. */
 let pairPick = null;
 
@@ -1137,9 +1218,11 @@ function renderDrawTab() {
   // Half a first round would otherwise crown whoever happened to get a bye.
   const rounds = waiting.length ? [(draw.bracket || [])] : bracketRounds(draw);
 
+  const numbers = drawNumbers(draw);
+
   rounds.forEach((ties, r) => {
     if (!ties.length) return;
-    box.appendChild(roundCard(draw, ties, r, r === 0 ? through.length : null));
+    box.appendChild(roundCard(draw, ties, r, r === 0 ? through.length : null, numbers));
   });
 
   if (waiting.length) {
@@ -1158,13 +1241,13 @@ function renderDrawTab() {
       card.className = 'card';
       card.innerHTML = `<h2>🏆 Winner</h2>`
         + `<div class="listrow"><div class="grow">`
-        + `<div class="name">${esc(champion)}</div></div></div>`;
+        + `<div class="name">${numbered(numbers, champion)}</div></div></div>`;
       box.appendChild(card);
     }
   }
 }
 
-function roundCard(draw, ties, index, teamsOverride) {
+function roundCard(draw, ties, index, teamsOverride, numbers) {
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = `<h2>${roundTitle(ties, index, teamsOverride)}</h2>`;
@@ -1176,13 +1259,15 @@ function roundCard(draw, ties, index, teamsOverride) {
     row.className = 'listrow';
 
     const label = tie.b
-      ? `<span class="${won && sameName(won, tie.a) ? 'through' : ''}">${esc(tie.a)}</span>`
+      ? `<span class="${won && sameName(won, tie.a) ? 'through' : ''}">`
+        + `${numbered(numbers, tie.a)}</span>`
         + ` <span class="muted">vs</span> `
-        + `<span class="${won && sameName(won, tie.b) ? 'through' : ''}">${esc(tie.b)}</span>`
-      : `<span class="through">${esc(tie.a)}</span>`;
+        + `<span class="${won && sameName(won, tie.b) ? 'through' : ''}">`
+        + `${numbered(numbers, tie.b)}</span>`
+      : `<span class="through">${numbered(numbers, tie.a)}</span>`;
 
     const under = tie.b
-      ? (won ? `${esc(won)} goes through` : 'Waiting for the result')
+      ? (won ? `${numbered(numbers, won)} goes through` : 'Waiting for the result')
       : 'Bye';
 
     row.innerHTML = `<div class="grow"><div class="name">${label}</div>`
@@ -1518,7 +1603,12 @@ function renderSheets() {
       del.onclick = async () => {
         if (await ask('Delete Match', `Delete ${m.team1Name} vs ${m.team2Name}?`, { yes: 'Delete' }) !== 'yes') return;
         const l = Matches.all();
-        const idx = typeof m.__index === 'number' ? m.__index : -1;
+
+        // by its tag, so a list that has shifted cannot delete the wrong sheet
+        const idx = m.id
+          ? l.findIndex(x => x.id === m.id)
+          : (typeof m.__index === 'number' ? m.__index : -1);
+
         if (idx >= 0 && idx < l.length) { l.splice(idx, 1); Matches.save(l); }
         toast('Match Deleted');
         renderSheets();

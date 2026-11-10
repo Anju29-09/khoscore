@@ -350,12 +350,15 @@ function saveEdit() {
 
   const all = Matches.all();
 
-  if (detailIndex < 0 || detailIndex >= all.length) {
+  // found by its tag, so the right sheet is written even if the list has shifted
+  const i = m.id ? all.findIndex(x => x.id === m.id) : detailIndex;
+
+  if (i < 0 || i >= all.length) {
     toast('Could not find this match in storage');
     return;
   }
 
-  all[detailIndex] = m;
+  all[i] = m;
   Matches.save(all);
 
   editBackup = null;
