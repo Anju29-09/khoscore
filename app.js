@@ -2046,7 +2046,10 @@ $('#acJoinBtn').onclick = async () => {
     const room = await Room.join(typed);
     field.value = '';
     toast('Joined ' + (room.tournament || 'the tournament'));
-    renderAccount();
+
+    // go straight to the tournament rather than leaving them on this screen
+    const draw = Draws.byId(room.drawId);
+    if (draw) showDraw(draw); else renderAccount();
 
   } catch (e) {
     toast(roomError(e), 4500);
@@ -2083,7 +2086,7 @@ function roomError(e) {
 
 /* ---------------- a room speaking up ---------------- */
 
-Room.watch(event => {
+function roomEvent(event) {
 
   if (event.type === 'ended') {
     ask('Session ended',
@@ -2108,7 +2111,7 @@ Room.watch(event => {
   }
 
   if (event.type === 'code' && current === 'drawdetail') renderShare();
-});
+}
 
 /** Reconnects to whichever room this draw belongs to, when one is opened. */
 function reopenRoomFor(drawId) {
@@ -2118,14 +2121,36 @@ function reopenRoomFor(drawId) {
 }
 
 /** A link of the shape ...?join=ABCD-EFGH drops someone straight into a room. */
-(function joinFromLink() {
+function joinFromLink() {
 
   const wanted = new URLSearchParams(location.search).get('join');
   if (!wanted) return;
 
   history.replaceState({}, '', location.pathname);
 
+  toast('Joining…', 8000);
+
   Room.join(Room.tidyCode(wanted))
-    .then(room => toast('Joined ' + (room.tournament || 'the tournament'), 4000))
-    .catch(e => toast(roomError(e), 5000));
-})();
+    .then(room => {
+      toast('Joined ' + (room.tournament || 'the tournament'), 4000);
+      const draw = Draws.byId(room.drawId);
+      if (draw) showDraw(draw);         // land on the tournament, not the home screen
+    })
+    .catch(e => toast(roomError(e), 6000));
+}
+
+/**
+ * room.js is loaded after this file, so nothing here may touch Room while the
+ * page is still parsing. Getting that wrong threw a ReferenceError that stopped
+ * join links working at all, silently - hence waiting for every script to be in.
+ */
+function wireRoomEvents() {
+  Room.watch(roomEvent);
+  joinFromLink();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', wireRoomEvents);
+} else {
+  wireRoomEvents();
+}
