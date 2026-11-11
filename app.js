@@ -1077,16 +1077,136 @@ function showDrawTab(which) {
 }
 
 /** The teams ticked in each group, in group order. */
+/**
+ * The field: every team that is in this draw.
+ *
+ * Two ways in, because not every tournament has a group stage. A team can be
+ * ticked through from a group, or picked straight from the registered list on
+ * the Draw tab for a straight knockout. Either way it reaches the bracket the
+ * same, and a team that arrives by both routes is still one team.
+ */
 function qualifiedTeams(draw) {
+
   const out = [];
+  const seen = new Set();
 
   (draw.groups || []).forEach((g, gi) => {
     (g.teams || []).forEach(name => {
-      if ((g.qualified || []).includes(name)) out.push({ group: groupName(gi), name });
+      if (!(g.qualified || []).includes(name)) return;
+      if (seen.has(name.toLowerCase())) return;
+      seen.add(name.toLowerCase());
+      out.push({ group: groupName(gi), name });
     });
   });
 
+  (draw.picked || []).forEach(name => {
+    if (seen.has(name.toLowerCase())) return;
+    seen.add(name.toLowerCase());
+    out.push({ group: '', name });
+  });
+
   return out;
+}
+
+/** The registered teams eligible for this draw: its own side and age group. */
+function teamsForDraw(draw) {
+  return Teams.all()
+    .filter(t => (t.teamType || '') === draw.teamType
+              && (t.category || '') === draw.category)
+    .sort((a, b) => (a.teamName || '').localeCompare(b.teamName || ''));
+}
+
+/** The group a team came through, if it came through one. */
+function groupOf(draw, name) {
+
+  const groups = draw.groups || [];
+
+  for (let i = 0; i < groups.length; i++) {
+    if ((groups[i].qualified || []).includes(name)) return groupName(i);
+  }
+
+  return '';
+}
+
+/** Whether a team has already been drawn against somebody. */
+function isPaired(draw, name) {
+  return (draw.bracket || []).some(t => sameName(t.a, name) || sameName(t.b, name));
+}
+
+/**
+ * Picking teams straight into the draw, for a tournament with no group stage.
+ * Same tick box and same row as a group, so the two read alike.
+ */
+function teamPickCard(draw) {
+
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const registered = teamsForDraw(draw);
+
+  card.innerHTML = `<h2>Teams in this draw</h2>`
+    + `<p class="muted" style="margin-top:-6px">`
+    + `Tick a team to put it in the draw. Groups are not needed - tick them here `
+    + `and pair them below.</p>`;
+
+  if (!registered.length) {
+    card.insertAdjacentHTML('beforeend',
+      `<div class="empty">No ${esc(draw.teamType)} ${esc(draw.category)} teams `
+      + `are registered yet</div>`);
+    return card;
+  }
+
+  registered.forEach(team => {
+
+    const name = team.teamName;
+    const from = groupOf(draw, name);
+    const wins = winsFor(draw, name);
+
+    const row = document.createElement('div');
+    row.className = 'listrow';
+
+    const tick = document.createElement('input');
+    tick.type = 'checkbox';
+    tick.className = 'qual';
+    tick.checked = !!from || (draw.picked || []).includes(name);
+
+    // a team that came through a group is managed on the Groups tab, not here
+    tick.disabled = !!from;
+    tick.title = from ? 'Came through ' + from : 'In the draw';
+
+    tick.onchange = () => {
+
+      const d = openDraw();
+      if (!d) return;
+
+      if (!tick.checked && isPaired(d, name)) {
+        tick.checked = true;
+        toast('Remove the tie on the Draw first', 3500);
+        return;
+      }
+
+      const on = new Set(d.picked || []);
+
+      if (tick.checked) on.add(name); else on.delete(name);
+
+      d.picked = [...on];
+
+      if (saveOpenDraw(d)) renderDrawTab();
+      else tick.checked = !tick.checked;
+    };
+
+    row.appendChild(tick);
+
+    row.insertAdjacentHTML('beforeend',
+      `<div class="grow">🔹 ${esc(name)}`
+      + (from ? ` <span class="muted">${esc(from)}</span>` : '')
+      + `</div>`
+      + (wins ? `<span class="wins" title="Matches won">${wins}</span>` : ''));
+
+    card.appendChild(row);
+  });
+
+  return card;
 }
 
 /* ---------------- the knockout bracket ---------------- */
@@ -1211,11 +1331,11 @@ function renderDrawTab() {
 
   const through = qualifiedTeams(draw).map(t => t.name);
 
-  if (!through.length) {
-    box.innerHTML = '<div class="card empty">Tick the teams going through '
-      + 'on the Groups tab and they appear here</div>';
-    return;
-  }
+  // the field is picked here, so this card comes first whether or not any team
+  // is in it yet
+  box.appendChild(teamPickCard(draw));
+
+  if (!through.length) return;
 
   // anyone not yet placed in a tie
   const placed = new Set();

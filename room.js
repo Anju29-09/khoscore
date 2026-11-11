@@ -100,6 +100,7 @@ const Room = (() => {
 
     const inDraw = new Set();
     (draw.groups || []).forEach(g => (g.teams || []).forEach(n => inDraw.add(n.toLowerCase())));
+    (draw.picked || []).forEach(n => inDraw.add(n.toLowerCase()));
     (draw.bracket || []).forEach(t => {
       if (t.a) inDraw.add(t.a.toLowerCase());
       if (t.b) inDraw.add(t.b.toLowerCase());
