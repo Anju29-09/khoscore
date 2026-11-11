@@ -323,7 +323,17 @@ const Room = (() => {
       createdAt: Date.now()
     });
 
-    batch.set(fs.doc(db, 'codes', roomCode), { roomId, hostUid: uid });
+    // The code doc carries everything joining needs. A room may only be read by
+    // its members, so a joiner cannot look at the room first - that would need
+    // to be a member before becoming one. The code is the capability.
+    batch.set(fs.doc(db, 'codes', roomCode), {
+      roomId,
+      hostUid: uid,
+      drawId: draw.id,
+      tournament: draw.tournament || '',
+      teamType: draw.teamType || '',
+      category: draw.category || ''
+    });
     batch.set(fs.doc(db, 'rooms', roomId, 'members', uid), { host: true, joinedAt: Date.now() });
 
     await batch.commit();
@@ -347,24 +357,39 @@ const Room = (() => {
     const { db, fs } = await Cloud.firestore();
 
     const codeDoc = await fs.getDoc(fs.doc(db, 'codes', wanted));
+
+    // ending a session and regenerating a code both delete the code document,
+    // so a code that no longer resolves is exactly a session that is over
     if (!codeDoc.exists()) throw new Error('no such code');
 
-    const roomId = codeDoc.data().roomId;
-
-    const roomDoc = await fs.getDoc(fs.doc(db, 'rooms', roomId));
-    if (!roomDoc.exists()) throw new Error('no such room');
-
-    const room = roomDoc.data();
-    if (room.ended) throw new Error('ended');
+    const room = codeDoc.data();
+    const roomId = room.roomId;
 
     const uid = Cloud.uid();
     const host = room.hostUid === uid;
 
+    // membership first: only then may this device read the room itself
     await fs.setDoc(fs.doc(db, 'rooms', roomId, 'members', uid),
                     { host, joinedAt: Date.now() });
 
-    remember(room.drawId, { roomId, code: wanted, host });
-    await attach(roomId, room.drawId, wanted, host);
+    let drawId = room.drawId;
+
+    // a room opened before the code carried these details: now that this device
+    // is a member, the room itself can be asked
+    if (!drawId) {
+      const roomDoc = await fs.getDoc(fs.doc(db, 'rooms', roomId));
+      if (!roomDoc.exists()) throw new Error('no such room');
+
+      const full = roomDoc.data();
+      if (full.ended) throw new Error('ended');
+
+      drawId = full.drawId;
+      room.drawId = drawId;
+      room.tournament = room.tournament || full.tournament || '';
+    }
+
+    remember(drawId, { roomId, code: wanted, host });
+    await attach(roomId, drawId, wanted, host);
 
     return room;
   }
@@ -411,9 +436,18 @@ const Room = (() => {
 
     const fresh = makeCode();
 
+    const draw = Draws.byId(live.drawId) || {};
+
     const batch = fs.writeBatch(db);
     batch.delete(fs.doc(db, 'codes', old));
-    batch.set(fs.doc(db, 'codes', fresh), { roomId, hostUid: Cloud.uid() });
+    batch.set(fs.doc(db, 'codes', fresh), {
+      roomId,
+      hostUid: Cloud.uid(),
+      drawId: live.drawId,
+      tournament: draw.tournament || '',
+      teamType: draw.teamType || '',
+      category: draw.category || ''
+    });
     batch.update(fs.doc(db, 'rooms', roomId), { code: fresh });
 
     await batch.commit();

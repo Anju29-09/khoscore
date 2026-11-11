@@ -2048,11 +2048,10 @@ $('#acJoinBtn').onclick = async () => {
     toast('Joined ' + (room.tournament || 'the tournament'));
 
     // go straight to the tournament rather than leaving them on this screen
-    const draw = Draws.byId(room.drawId);
-    if (draw) showDraw(draw); else renderAccount();
+    openJoined(room.drawId);
 
   } catch (e) {
-    toast(roomError(e), 4500);
+    toast(roomError(e, true), 4500);
 
   } finally {
     btn.disabled = false;
@@ -2060,8 +2059,20 @@ $('#acJoinBtn').onclick = async () => {
   }
 };
 
+/** A tournament to open as soon as its draw arrives from the room. */
+let pendingOpenDraw = null;
+
+/** Opens a joined tournament now, or the moment it comes down. */
+function openJoined(drawId) {
+  const draw = Draws.byId(drawId);
+  if (draw) { showDraw(draw); return; }
+
+  pendingOpenDraw = drawId;
+  toast('Getting the tournament…', 6000);
+}
+
 /** Plain words for what went wrong, since these all look alike to a referee. */
-function roomError(e) {
+function roomError(e, joining) {
 
   const code = (e && e.code) || '';
   const msg = (e && e.message) || '';
@@ -2071,7 +2082,11 @@ function roomError(e) {
   if (msg === 'bad code') return 'A code looks like ABCD-EFGH';
   if (msg === 'sign-in required') return 'Sign in first to host a tournament';
 
-  if (code === 'permission-denied') return 'Only the host can do that';
+  if (code === 'permission-denied') {
+    return joining
+      ? 'The server refused this join. The host may need to check the setup.'
+      : 'Only the host can change this tournament';
+  }
 
   if (code === 'unavailable' || code === 'auth/network-request-failed') {
     return 'No connection. Scoring still works - this will catch up later.';
@@ -2100,6 +2115,14 @@ function roomEvent(event) {
   }
 
   if (event.type === 'records') {
+
+    // a tournament just joined arrives a moment after joining, not with it, so
+    // the screen opens when the draw itself turns up
+    if (pendingOpenDraw) {
+      const draw = Draws.byId(pendingOpenDraw);
+      if (draw) { pendingOpenDraw = null; showDraw(draw); return; }
+    }
+
     // whatever is on screen may have just changed under it
     if (current === 'drawdetail') {
       if (ddTab === 'groups') renderGroups();
@@ -2133,10 +2156,9 @@ function joinFromLink() {
   Room.join(Room.tidyCode(wanted))
     .then(room => {
       toast('Joined ' + (room.tournament || 'the tournament'), 4000);
-      const draw = Draws.byId(room.drawId);
-      if (draw) showDraw(draw);         // land on the tournament, not the home screen
+      openJoined(room.drawId);          // land on the tournament, not the home screen
     })
-    .catch(e => toast(roomError(e), 6000));
+    .catch(e => toast(roomError(e, true), 6000));
 }
 
 /**
