@@ -38,11 +38,53 @@
     <button data-go="draws">🗂 Draws</button>
     <button id="startMatchBtn">🔥 Start Match</button>
     <button data-go="sheets">📄 Score Sheets</button>
+    <button data-go="account">☁ Share Across Devices</button>
   </div>
 
   <p class="muted" id="installHint" style="display:none">
     Tip: use your browser's <b>Install</b> button to keep KhoTrack on your desktop or home screen.
   </p>
+</section>
+
+<!-- ============ SHARE ACROSS DEVICES ============ -->
+<section id="s-account" class="screen">
+  <button class="grey" data-back>← Back</button>
+  <h1>☁ Share Across Devices</h1>
+
+  <div class="card" id="acSignedOut">
+    <h2>Sign in to host</h2>
+    <p class="muted">
+      Sign in and your tournaments belong to you rather than to this phone. Lose
+      it, break it, or pick up a laptop instead - sign in there and your teams,
+      score sheets and draws are waiting.
+    </p>
+    <p class="muted">
+      Scorers never sign in. You hand them a code and they join.
+    </p>
+
+    <button id="acSignInBtn" class="green">Continue with Google</button>
+
+    <p class="muted" id="acNote">
+      Only your email is stored. Scoring works the same signed in or not, online
+      or off.
+    </p>
+  </div>
+
+  <div class="card" id="acSignedIn" style="display:none">
+    <h2>Signed in</h2>
+    <div class="listrow">
+      <div class="grow">
+        <div class="name" id="acEmail"></div>
+        <div class="meta">This device can host tournaments</div>
+      </div>
+    </div>
+    <button id="acSignOutBtn" class="red">Sign out</button>
+  </div>
+
+  <div class="card empty" id="acSoon">
+    Rooms are next: a code per tournament, scorers joining from their own phones,
+    and the draw kept to the host.
+  </div>
 </section>
 
 <!-- ============ TEAM REGISTRATION ============ -->
@@ -504,6 +546,7 @@
 
 <div id="toast"></div>
 
+<script src="cloud.js?v=29"></script>
 <script src="share.js?v=29"></script>
 <script src="app.js?v=29"></script>
 <script src="scoring.js?v=29"></script>

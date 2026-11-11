@@ -288,7 +288,8 @@ const SCREEN_ENTER = {
   home: renderHome,
   teams: renderTeams,
   draws: renderDraws,
-  sheets: renderSheets
+  sheets: renderSheets,
+  account: renderAccount
 };
 
 document.addEventListener('click', e => {
@@ -1627,3 +1628,76 @@ $('#sheetSearch').addEventListener('input', renderSheets);
 function isDraw(m) {
   return m.winner !== m.team1Name && m.winner !== m.team2Name;
 }
+
+/* ============================================================
+   SHARE ACROSS DEVICES
+   ============================================================ */
+
+/**
+ * The sign-in screen.
+ *
+ * Signing in is the host's own convenience, never a gate: every other screen
+ * works the same whether this one has been visited or not.
+ */
+function renderAccount() {
+
+  const signedIn = !!Cloud.user();
+
+  $('#acSignedOut').style.display = signedIn ? 'none' : '';
+  $('#acSignedIn').style.display = signedIn ? '' : 'none';
+  $('#acEmail').textContent = Cloud.email() || 'Signed in';
+}
+
+Cloud.watch(() => { if (current === 'account') renderAccount(); });
+
+$('#acSignInBtn').onclick = async () => {
+
+  const btn = $('#acSignInBtn');
+
+  btn.disabled = true;
+  btn.textContent = 'Opening Google…';
+
+  try {
+    const done = await Cloud.signIn();
+    if (done) toast('Signed in as ' + Cloud.email());
+
+  } catch (e) {
+
+    const code = (e && e.code) || '';
+
+    if (code === 'auth/network-request-failed') {
+      toast('No connection. Signing in needs internet - everything else does not.', 4500);
+    } else if (code === 'auth/unauthorized-domain') {
+      toast('This address is not on the Firebase allowed list yet', 5000);
+    } else {
+      toast('Could not sign in. Please try again.', 4000);
+    }
+
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Continue with Google';
+    renderAccount();
+  }
+};
+
+$('#acSignOutBtn').onclick = async () => {
+
+  const answer = await ask('Sign out?',
+    'Your teams, score sheets and draws stay on this device. Sign in again any '
+    + 'time to host from another one.', { yes: 'Sign out', no: 'Stay signed in' });
+
+  if (answer !== 'yes') return;
+
+  try {
+    await Cloud.signOut();
+    toast('Signed out');
+  } catch (e) {
+    toast('Could not sign out - check your connection', 4000);
+  }
+
+  renderAccount();
+};
+
+// brings back a signed-in host at startup, and costs nothing on a device that
+// has never signed in
+Cloud.restore();
