@@ -35,6 +35,8 @@ const Cloud = (() => {
 
   let parts = null;        // the loaded SDK, once it is up
   let loading = null;      // the load in flight, so two taps share one download
+  let store = null;        // Firestore, loaded separately and only for rooms
+  let storeLoading = null;
   let account = null;      // the signed-in user, or null
   let ready = false;       // true once Firebase has told us who is signed in
 
@@ -141,9 +143,74 @@ const Cloud = (() => {
     });
   }
 
+  /**
+   * Firestore, where rooms live. A separate download from auth and a much
+   * larger one, so it is fetched only when a tournament is actually shared.
+   *
+   * Offline reads and writes are kept on the device and sent when the signal
+   * comes back - the reason this works at a ground at all.
+   */
+  function firestore() {
+
+    if (store) return Promise.resolve(store);
+    if (storeLoading) return storeLoading;
+
+    storeLoading = (async () => {
+
+      const { app } = await load();
+      const fs = await import(SDK + 'firebase-firestore.js');
+
+      let db;
+
+      try {
+        db = fs.initializeFirestore(app, {
+          localCache: fs.persistentLocalCache({
+            tabManager: fs.persistentMultipleTabManager()
+          })
+        });
+
+      } catch (e) {
+        // a second tab, a private window, or a browser that will not keep a
+        // local copy: the room still works, it just forgets when offline
+        db = fs.getFirestore(app);
+      }
+
+      store = { db, fs };
+      return store;
+    })();
+
+    storeLoading.catch(() => { storeLoading = null; });
+
+    return storeLoading;
+  }
+
+  /**
+   * Whoever is using this device, as far as the server is concerned. A host is
+   * signed in with Google; a scorer joining with a code gets an anonymous
+   * identity, which is enough for the rules to tell devices apart and for the
+   * host to remove one.
+   */
+  async function ensureUser() {
+
+    const { auth, authMod } = await load();
+
+    if (auth.currentUser) return auth.currentUser;
+
+    const cred = await authMod.signInAnonymously(auth);
+    return cred.user;
+  }
+
   return {
     /** The signed-in user, or null. */
     user: () => account,
+
+    /** True for a real Google account, false for a scorer's anonymous one. */
+    isHost: () => !!account && !account.isAnonymous,
+
+    uid: () => (account && account.uid) || '',
+
+    firestore,
+    ensureUser,
 
     /** True once we know one way or the other, so the screen can avoid a flicker. */
     ready: () => ready,

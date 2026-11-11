@@ -1048,6 +1048,10 @@ let openDrawId = null;
 function showDraw(draw) {
   openDrawId = draw.id;
 
+  // if this tournament is shared, pick the room back up so changes from the
+  // other devices start arriving again
+  reopenRoomFor(draw.id);
+
   $('#ddName').textContent = draw.tournament;
   $('#ddMeta').textContent =
     `${drawDates(draw).join(',  ')}   •   ${draw.teamType} ${draw.category}`;
@@ -1059,11 +1063,15 @@ function showDraw(draw) {
 function showDrawTab(which) {
   const groups = which === 'groups';
 
+  ddTab = which;
+
   $('#ddGroupsView').style.display = groups ? '' : 'none';
   $('#ddDrawView').style.display = groups ? 'none' : '';
+  $('#ddShareView').style.display = 'none';
 
   $('#ddGroupsTab').className = groups ? 'green' : 'grey';
   $('#ddDrawTab').className = groups ? 'grey' : 'green';
+  $('#ddShareTab').className = 'grey';
 
   if (groups) renderGroups(); else renderDrawTab();
 }
@@ -1356,8 +1364,21 @@ function openDraw() {
   return Draws.byId(openDrawId);
 }
 
-/** Writes a change back to the stored list. */
+/**
+ * Writes a change back to the stored list.
+ *
+ * Every edit to a draw - adding a group, ticking a team through, pairing a tie,
+ * giving a bye - passes through here, which makes it the one place to say that a
+ * shared tournament belongs to its host. The server refuses such writes anyway;
+ * this is so a joined scorer is told plainly instead of watching nothing happen.
+ */
 function saveOpenDraw(draw) {
+
+  if (!Room.canEdit(draw.id)) {
+    toast('Only the host can change this tournament', 3500);
+    return false;
+  }
+
   const list = Draws.all();
   const i = list.findIndex(d => d.id === draw.id);
 
@@ -1641,11 +1662,50 @@ function isDraw(m) {
  */
 function renderAccount() {
 
-  const signedIn = !!Cloud.user();
+  // an anonymous identity is how a scorer joins a room; it is not being signed in
+  const signedIn = Cloud.isHost();
 
   $('#acSignedOut').style.display = signedIn ? 'none' : '';
   $('#acSignedIn').style.display = signedIn ? '' : 'none';
   $('#acEmail').textContent = Cloud.email() || 'Signed in';
+
+  renderRoomList();
+}
+
+/** The tournaments this device is sharing or has joined. */
+function renderRoomList() {
+
+  const box = $('#acRoomList');
+  const rows = [];
+
+  Draws.all().forEach(d => {
+    const m = Room.forDraw(d.id);
+    if (m) rows.push({ draw: d, member: m });
+  });
+
+  $('#acRooms').style.display = rows.length ? '' : 'none';
+  if (!rows.length) return;
+
+  box.innerHTML = '';
+
+  rows.forEach(({ draw, member }) => {
+
+    const row = document.createElement('div');
+    row.className = 'listrow';
+
+    row.innerHTML = `<div class="grow">`
+      + `<div class="name">${esc(draw.tournament || 'Tournament')}</div>`
+      + `<div class="meta">${esc(draw.teamType)} ${esc(draw.category)} &nbsp;•&nbsp; `
+      + `${member.host ? 'Hosting' : 'Joined'} &nbsp;•&nbsp; ${esc(member.code)}</div>`
+      + `</div>`;
+
+    const open = document.createElement('button');
+    open.textContent = 'Open';
+    open.onclick = () => showDraw(draw);
+
+    row.appendChild(open);
+    box.appendChild(row);
+  });
 }
 
 Cloud.watch(() => { if (current === 'account') renderAccount(); });
@@ -1701,3 +1761,251 @@ $('#acSignOutBtn').onclick = async () => {
 // brings back a signed-in host at startup, and costs nothing on a device that
 // has never signed in
 Cloud.restore();
+
+/* ============================================================
+   SHARING A TOURNAMENT
+   ============================================================ */
+
+/** Which of the three tabs on a draw is showing. */
+let ddTab = 'groups';
+
+function showShareTab() {
+  ddTab = 'share';
+  $('#ddGroupsView').style.display = 'none';
+  $('#ddDrawView').style.display = 'none';
+  $('#ddShareView').style.display = '';
+  $('#ddGroupsTab').className = 'grey';
+  $('#ddDrawTab').className = 'grey';
+  $('#ddShareTab').className = 'green';
+  renderShare();
+}
+
+$('#ddShareTab').onclick = showShareTab;
+
+function renderShare() {
+
+  const draw = openDraw();
+  if (!draw) return;
+
+  const member = Room.forDraw(draw.id);
+  const hosting = member && member.host;
+  const guest = member && !member.host;
+
+  $('#shStart').style.display = member ? 'none' : '';
+  $('#shHost').style.display = hosting ? '' : 'none';
+  $('#shGuest').style.display = guest ? '' : 'none';
+
+  if (!member) {
+    const canHost = Cloud.isHost();
+    $('#shCreateBtn').style.display = canHost ? '' : 'none';
+    $('#shNeedSignIn').style.display = canHost ? 'none' : '';
+    return;
+  }
+
+  $(hosting ? '#shCode' : '#shGuestCode').textContent = member.code;
+}
+
+/** The link that drops someone straight into this room. */
+function joinLink(code) {
+  return location.origin + location.pathname + '?join=' + encodeURIComponent(code);
+}
+
+$('#shCreateBtn').onclick = async () => {
+
+  const draw = openDraw();
+  if (!draw) return;
+
+  const btn = $('#shCreateBtn');
+  btn.disabled = true;
+  btn.textContent = 'Opening...';
+
+  try {
+    await Room.createFor(draw);
+    toast('Room open - share the code');
+
+  } catch (e) {
+    toast(roomError(e), 4500);
+
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Open a room';
+    renderShare();
+  }
+};
+
+$('#shCopyBtn').onclick = async () => {
+  const m = Room.forDraw(openDrawId);
+  if (!m) return;
+  try { await navigator.clipboard.writeText(m.code); toast('Code copied'); }
+  catch (e) { toast('Could not copy - the code is ' + m.code, 5000); }
+};
+
+$('#shLinkBtn').onclick = async () => {
+
+  const m = Room.forDraw(openDrawId);
+  const draw = openDraw();
+  if (!m || !draw) return;
+
+  const text = 'Join ' + (draw.tournament || 'the tournament') + ' on KhoTrack.\n'
+    + 'Code: ' + m.code + '\n' + joinLink(m.code);
+
+  if (navigator.share) {
+    try { await navigator.share({ title: 'KhoTrack', text }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+
+  try { await navigator.clipboard.writeText(text); toast('Invite copied - paste it to them'); }
+  catch (e) { toast('Code: ' + m.code, 6000); }
+};
+
+$('#shNewCodeBtn').onclick = async () => {
+
+  const answer = await ask('New code?',
+    'The old code stops working straight away and every device that joined with '
+    + 'it is dropped. The tournament itself is not touched.',
+    { yes: 'New code', no: 'Keep this one' });
+
+  if (answer !== 'yes') return;
+
+  try {
+    const fresh = await Room.regenerate();
+    toast('New code: ' + fresh, 4000);
+  } catch (e) {
+    toast(roomError(e), 4500);
+  }
+
+  renderShare();
+};
+
+$('#shEndBtn').onclick = async () => {
+
+  const answer = await ask('End session for everyone?',
+    'Everyone who joined is dropped and the code stops working. Your draw and '
+    + 'score sheets stay here, and so does their copy of what they already have.',
+    { yes: 'End session', no: 'Keep it open' });
+
+  if (answer !== 'yes') return;
+
+  try {
+    await Room.end();
+    toast('Session ended');
+  } catch (e) {
+    toast(roomError(e), 4500);
+  }
+
+  renderShare();
+};
+
+$('#shLeaveBtn').onclick = async () => {
+
+  const answer = await ask('Leave this tournament?',
+    'It stops updating on this device. What you already have stays.',
+    { yes: 'Leave', no: 'Stay' });
+
+  if (answer !== 'yes') return;
+
+  await Room.leave();
+  toast('Left the tournament');
+  renderShare();
+};
+
+/* ---------------- joining ---------------- */
+
+$('#acJoinBtn').onclick = async () => {
+
+  const field = $('#acJoinCode');
+  const typed = Room.tidyCode(field.value);
+
+  if (typed.length !== 9) { toast('A code looks like ABCD-EFGH'); return; }
+
+  const btn = $('#acJoinBtn');
+  btn.disabled = true;
+  btn.textContent = 'Joining...';
+
+  try {
+    const room = await Room.join(typed);
+    field.value = '';
+    toast('Joined ' + (room.tournament || 'the tournament'));
+    renderAccount();
+
+  } catch (e) {
+    toast(roomError(e), 4500);
+
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Join';
+  }
+};
+
+/** Plain words for what went wrong, since these all look alike to a referee. */
+function roomError(e) {
+
+  const code = (e && e.code) || '';
+  const msg = (e && e.message) || '';
+
+  if (msg === 'no such code') return 'No tournament with that code';
+  if (msg === 'ended') return 'That session has been ended by the host';
+  if (msg === 'bad code') return 'A code looks like ABCD-EFGH';
+  if (msg === 'sign-in required') return 'Sign in first to host a tournament';
+
+  if (code === 'permission-denied') return 'Only the host can do that';
+
+  if (code === 'unavailable' || code === 'auth/network-request-failed') {
+    return 'No connection. Scoring still works - this will catch up later.';
+  }
+
+  if (code === 'auth/admin-restricted-operation') {
+    return 'Anonymous sign-in is not switched on in Firebase yet';
+  }
+
+  return 'That did not work. Please try again.';
+}
+
+/* ---------------- a room speaking up ---------------- */
+
+Room.watch(event => {
+
+  if (event.type === 'ended') {
+    ask('Session ended',
+        event.regenerated
+          ? 'The host has issued a new code. Ask them for it to join again.'
+          : 'The host has ended this session.',
+        { yes: 'OK', no: null });
+
+    if (current === 'drawdetail') renderShare();
+    return;
+  }
+
+  if (event.type === 'records') {
+    // whatever is on screen may have just changed under it
+    if (current === 'drawdetail') {
+      if (ddTab === 'groups') renderGroups();
+      else if (ddTab === 'draw') renderDrawTab();
+    } else if (current === 'sheets') renderSheets();
+    else if (current === 'teams') renderTeams();
+    else if (current === 'draws') renderDraws();
+    return;
+  }
+
+  if (event.type === 'code' && current === 'drawdetail') renderShare();
+});
+
+/** Reconnects to whichever room this draw belongs to, when one is opened. */
+function reopenRoomFor(drawId) {
+  if (Room.liveDrawId() === drawId) return;
+  Room.stop();
+  Room.reopen(drawId).catch(() => {});
+}
+
+/** A link of the shape ...?join=ABCD-EFGH drops someone straight into a room. */
+(function joinFromLink() {
+
+  const wanted = new URLSearchParams(location.search).get('join');
+  if (!wanted) return;
+
+  history.replaceState({}, '', location.pathname);
+
+  Room.join(Room.tidyCode(wanted))
+    .then(room => toast('Joined ' + (room.tournament || 'the tournament'), 4000))
+    .catch(e => toast(roomError(e), 5000));
+})();

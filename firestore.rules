@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// KhoTrack tournament rooms.
+//
+// The shape of the thing: a room is one tournament. Its code is the key to the
+// door, its host is the only one who may change the draw, and anyone in the room
+// may score a match. Nothing can be listed or searched - without the exact code
+// there is no way to find a room at all.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function room(roomId) {
+      return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+    }
+
+    function isHostOf(roomId) {
+      return signedIn() && room(roomId).hostUid == request.auth.uid;
+    }
+
+    function isMemberOf(roomId) {
+      return signedIn() && exists(
+        /databases/$(database)/documents/rooms/$(roomId)/members/$(request.auth.uid));
+    }
+
+    // The code is the door. Anyone holding one may look it up, which is how
+    // joining works, but nobody may list them: guessing is the only other way in
+    // and there are a thousand billion codes.
+    match /codes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      // only the person who will host it may claim a code, and only its own host
+      // may retire it when regenerating or ending
+      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.hostUid == request.auth.uid;
+      allow update: if false;
+    }
+
+    match /rooms/{roomId} {
+
+      allow get: if isMemberOf(roomId) || isHostOf(roomId);
+      allow list: if false;
+
+      allow create: if signedIn()
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.ended == false;
+
+      // the host may end it or change its code; the host never changes
+      allow update: if isHostOf(roomId)
+                    && request.resource.data.hostUid == resource.data.hostUid
+                    && request.resource.data.drawId == resource.data.drawId;
+
+      // a room is never deleted, so that "the host ended this" can still be told
+      // to devices that were offline when it happened
+      allow delete: if false;
+
+      match /members/{uid} {
+
+        // you may add and remove only yourself: joining and leaving
+        allow create: if signedIn() && uid == request.auth.uid;
+        allow delete: if signedIn() && (uid == request.auth.uid || isHostOf(roomId));
+
+        allow get, list: if isMemberOf(roomId);
+        allow update: if false;
+      }
+
+      match /records/{recordId} {
+
+        allow read: if isMemberOf(roomId);
+
+        // Score sheets are why scorers are here, so any member may write one.
+        // The draw, the groups and the teams belong to the host alone - this is
+        // the line that makes "only the host can change the draw" true rather
+        // than merely hidden in the app.
+        allow create, update: if isMemberOf(roomId)
+          && (request.resource.data.kind == 'match' || isHostOf(roomId));
+
+        allow delete: if isHostOf(roomId);
+      }
+    }
+
+    // nothing else in this project is reachable
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

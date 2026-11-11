@@ -453,3 +453,26 @@ table.sheet tr.editable:hover td { background: #ffffff12; }
   vertical-align: 1px;
 }
 .through .seed { background: #14532d; box-shadow: inset 0 0 0 1px #22c55e; color: #86efac; }
+
+/* A room code is read aloud across a ground and typed by someone in a hurry:
+   big, spaced, and in a face where 8 and B cannot be confused. */
+.roomcode {
+  margin: 10px 0 6px;
+  padding: 14px 10px;
+  border-radius: 12px;
+  background: #0b1220;
+  box-shadow: inset 0 0 0 1px #334155;
+  color: var(--cyan);
+  font-family: "Consolas", "Menlo", "Courier New", monospace;
+  font-size: clamp(26px, 8vw, 38px);
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-align: center;
+  user-select: all;
+}
+#acJoinCode {
+  font-family: "Consolas", "Menlo", "Courier New", monospace;
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
