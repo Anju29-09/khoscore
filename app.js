@@ -1051,6 +1051,7 @@ function showDraw(draw) {
   // if this tournament is shared, pick the room back up so changes from the
   // other devices start arriving again
   reopenRoomFor(draw.id);
+  renderDrawTabButtons(draw.id);
 
   $('#ddName').textContent = draw.tournament;
   $('#ddMeta').textContent =
@@ -1144,10 +1145,7 @@ function teamPickCard(draw) {
 
   const registered = teamsForDraw(draw);
 
-  card.innerHTML = `<h2>Teams in this draw</h2>`
-    + `<p class="muted" style="margin-top:-6px">`
-    + `Tick a team to put it in the draw. Groups are not needed - tick them here `
-    + `and pair them below.</p>`;
+  card.innerHTML = `<h2>Teams in this draw</h2>`;
 
   if (!registered.length) {
     card.insertAdjacentHTML('beforeend',
@@ -1427,9 +1425,7 @@ function pairingCard(draw, waiting) {
   const card = document.createElement('div');
   card.className = 'card';
 
-  card.innerHTML = `<h2>Teams to pair</h2>`
-    + `<p class="muted" style="margin-top:-6px">Tap two teams to put them together, `
-    + `or give one a bye.</p>`;
+  card.innerHTML = `<h2>Teams to pair</h2>`;
 
   waiting.forEach(name => {
     const row = document.createElement('div');
@@ -1902,6 +1898,19 @@ function showShareTab() {
 
 $('#ddShareTab').onclick = showShareTab;
 
+$('#ddLeaveTab').onclick = async () => {
+
+  const answer = await ask('Leave this tournament?',
+    'It stops updating on this device. What you already have stays.',
+    { yes: 'Leave', no: 'Stay' });
+
+  if (answer !== 'yes') return;
+
+  await Room.leave();
+  toast('Left the tournament');
+  go('draws');
+};
+
 function renderShare() {
 
   const draw = openDraw();
@@ -1909,11 +1918,9 @@ function renderShare() {
 
   const member = Room.forDraw(draw.id);
   const hosting = member && member.host;
-  const guest = member && !member.host;
 
   $('#shStart').style.display = member ? 'none' : '';
   $('#shHost').style.display = hosting ? '' : 'none';
-  $('#shGuest').style.display = guest ? '' : 'none';
 
   if (!member) {
     const canHost = Cloud.isHost();
@@ -1922,7 +1929,31 @@ function renderShare() {
     return;
   }
 
-  $(hosting ? '#shCode' : '#shGuestCode').textContent = member.code;
+  if (hosting) $('#shCode').textContent = member.code;
+}
+
+/**
+ * The code belongs to the host. A device that joined with one is only passing
+ * through, so it gets no Share tab and is never shown the code again - just a
+ * way out.
+ */
+function renderDrawTabButtons(drawId) {
+
+  const member = Room.forDraw(drawId);
+  const guest = !!member && !member.host;
+
+  $('#ddShareTab').style.display = guest ? 'none' : '';
+  $('#ddLeaveTab').style.display = guest ? '' : 'none';
+
+  if (!guest) return;
+
+  // Wipe the host panel rather than merely hiding it. This device may have
+  // hosted something before, and a code left sitting in the page is a code that
+  // can still be found.
+  $('#ddShareView').style.display = 'none';
+  $('#shStart').style.display = 'none';
+  $('#shHost').style.display = 'none';
+  $('#shCode').textContent = '';
 }
 
 /** The link that drops someone straight into this room. */
@@ -1941,6 +1972,7 @@ $('#shCreateBtn').onclick = async () => {
 
   try {
     await Room.createFor(draw);
+    renderDrawTabButtons(draw.id);
     toast('Room open - share the code');
 
   } catch (e) {
@@ -2013,19 +2045,6 @@ $('#shEndBtn').onclick = async () => {
     toast(roomError(e), 4500);
   }
 
-  renderShare();
-};
-
-$('#shLeaveBtn').onclick = async () => {
-
-  const answer = await ask('Leave this tournament?',
-    'It stops updating on this device. What you already have stays.',
-    { yes: 'Leave', no: 'Stay' });
-
-  if (answer !== 'yes') return;
-
-  await Room.leave();
-  toast('Left the tournament');
   renderShare();
 };
 
@@ -2110,7 +2129,7 @@ function roomEvent(event) {
           : 'The host has ended this session.',
         { yes: 'OK', no: null });
 
-    if (current === 'drawdetail') renderShare();
+    if (current === 'drawdetail') { renderDrawTabButtons(openDrawId); renderShare(); }
     return;
   }
 

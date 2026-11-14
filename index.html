@@ -53,21 +53,7 @@
 
   <div class="card" id="acSignedOut">
     <h2>Sign in to host</h2>
-    <p class="muted">
-      Sign in and your tournaments belong to you rather than to this phone. Lose
-      it, break it, or pick up a laptop instead - sign in there and your teams,
-      score sheets and draws are waiting.
-    </p>
-    <p class="muted">
-      Scorers never sign in. You hand them a code and they join.
-    </p>
-
     <button id="acSignInBtn" class="green">Continue with Google</button>
-
-    <p class="muted" id="acNote">
-      Only your email is stored. Scoring works the same signed in or not, online
-      or off.
-    </p>
   </div>
 
   <div class="card" id="acSignedIn" style="display:none">
@@ -75,7 +61,6 @@
     <div class="listrow">
       <div class="grow">
         <div class="name" id="acEmail"></div>
-        <div class="meta">This device can host tournaments</div>
       </div>
     </div>
     <button id="acSignOutBtn" class="red">Sign out</button>
@@ -83,10 +68,6 @@
 
   <div class="card">
     <h2>Join a tournament</h2>
-    <p class="muted">
-      Got a code from the host? Type it here and this tournament appears on this
-      device. You do not need to sign in for this.
-    </p>
     <div class="field">
       <input type="text" id="acJoinCode" placeholder="ABCD-EFGH"
              autocapitalize="characters" autocomplete="off" spellcheck="false">
@@ -329,6 +310,7 @@
     <button id="ddGroupsTab" class="green">👥 Groups</button>
     <button id="ddDrawTab" class="grey">🏆 Draw</button>
     <button id="ddShareTab" class="grey">☁ Share</button>
+    <button id="ddLeaveTab" class="red" style="display:none">⬅ Leave</button>
   </div>
 
   <div id="ddShareView" style="display:none">
@@ -336,15 +318,9 @@
     <!-- not shared yet, and this device is the owner -->
     <div class="card" id="shStart">
       <h2>Share this tournament</h2>
-      <p class="muted">
-        Open a room and you get a code. Anyone you give it to sees this
-        tournament on their own phone and can score its matches. Your other
-        teams, tournaments and score sheets stay here.
-      </p>
       <button id="shCreateBtn" class="green">Open a room</button>
       <p class="muted" id="shNeedSignIn" style="display:none">
-        Hosting needs you signed in, so the tournament belongs to you rather than
-        to this phone. <b>Share Across Devices</b> on the home screen.
+        Sign in first, on <b>Share Across Devices</b>.
       </p>
     </div>
 
@@ -352,7 +328,6 @@
     <div class="card" id="shHost" style="display:none">
       <h2>Your code</h2>
       <div class="roomcode" id="shCode">----&#8209;----</div>
-      <p class="muted">Read it out, or send the link. Treat it like a Wi&#8209;Fi password.</p>
       <div class="row">
         <button id="shCopyBtn">📋 Copy code</button>
         <button id="shLinkBtn">🔗 Send link</button>
@@ -364,16 +339,6 @@
       <p class="muted" id="shStatus"></p>
     </div>
 
-    <!-- joined someone else's -->
-    <div class="card" id="shGuest" style="display:none">
-      <h2>You joined this tournament</h2>
-      <div class="roomcode" id="shGuestCode">----&#8209;----</div>
-      <p class="muted">
-        You can score matches here. The draw, the groups and the teams belong to
-        the host.
-      </p>
-      <button id="shLeaveBtn" class="red">Leave</button>
-    </div>
   </div>
 
   <div id="ddGroupsView">
