@@ -1829,7 +1829,13 @@ function renderAccount() {
   renderRoomList();
 }
 
-/** The tournaments this device is sharing or has joined. */
+/**
+ * The tournaments this device is sharing or has joined.
+ *
+ * Only a host sees a code here. A device that joined with one must never be
+ * shown it again anywhere, or it could pass it on to somebody the host never
+ * invited.
+ */
 function renderRoomList() {
 
   const box = $('#acRoomList');
@@ -1853,7 +1859,9 @@ function renderRoomList() {
     row.innerHTML = `<div class="grow">`
       + `<div class="name">${esc(draw.tournament || 'Tournament')}</div>`
       + `<div class="meta">${esc(draw.teamType)} ${esc(draw.category)} &nbsp;•&nbsp; `
-      + `${member.host ? 'Hosting' : 'Joined'} &nbsp;•&nbsp; ${esc(member.code)}</div>`
+      + `${member.host
+            ? 'Hosting &nbsp;•&nbsp; ' + esc(member.code)
+            : 'Joined'}</div>`
       + `</div>`;
 
     const open = document.createElement('button');
@@ -2028,7 +2036,7 @@ $('#shCreateBtn').onclick = async () => {
 
 $('#shCopyBtn').onclick = async () => {
   const m = Room.forDraw(openDrawId);
-  if (!m) return;
+  if (!m || !m.host) return;
   try { await navigator.clipboard.writeText(m.code); toast('Code copied'); }
   catch (e) { toast('Could not copy - the code is ' + m.code, 5000); }
 };
@@ -2037,7 +2045,7 @@ $('#shLinkBtn').onclick = async () => {
 
   const m = Room.forDraw(openDrawId);
   const draw = openDraw();
-  if (!m || !draw) return;
+  if (!m || !m.host || !draw) return;
 
   const text = 'Join ' + (draw.tournament || 'the tournament') + ' on KhoTrack.\n'
     + 'Code: ' + m.code + '\n' + joinLink(m.code);
