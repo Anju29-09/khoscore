@@ -151,6 +151,12 @@ const Room = (() => {
 
     recordsFor(draw).forEach(rec => {
 
+      // A joined device may only write score sheets. A batch is all or nothing,
+      // so one draw or team record in it gets the whole batch refused - and the
+      // score sheet thrown out along with it. They are left out here rather
+      // than rejected there.
+      if (!live.host && rec.kind !== 'match') return;
+
       const body = JSON.stringify(rec.data);
 
       // unchanged since the last push: leave it alone rather than spend a write
@@ -394,12 +400,23 @@ const Room = (() => {
     return room;
   }
 
-  /** Leaves on this device only. The tournament stays where it is. */
+  /**
+   * Leaves on this device only. The room itself carries on without it.
+   *
+   * A tournament this device merely joined belongs to the host, so leaving
+   * takes it off this device along with what was remembered about syncing it -
+   * otherwise a stale copy sits in the Draws list that nothing will ever update
+   * again, and rejoining later would skip the records it thinks it has.
+   *
+   * The score sheets scored here are kept. They are a record of matches that
+   * were really played, and throwing away a scorer's own afternoon because they
+   * tapped Leave would be its own kind of bug.
+   */
   async function leave() {
 
     if (!live) return;
 
-    const { roomId, drawId } = live;
+    const { roomId, drawId, host } = live;
 
     try {
       const { db, fs } = await Cloud.firestore();
@@ -407,6 +424,22 @@ const Room = (() => {
     } catch (e) {}
 
     forget(drawId);
+
+    if (!host) dropJoined(drawId);
+  }
+
+  /** Takes a tournament this device had only joined back off it. */
+  function dropJoined(drawId) {
+
+    const list = Draws.all();
+    const i = list.findIndex(d => d.id === drawId);
+
+    // live is already null by now, so this save starts no push
+    if (i >= 0) { list.splice(i, 1); Draws.save(list); }
+
+    const all = revs();
+    delete all[drawId];
+    DB.write(REVS, all);
   }
 
   /** Host only. Closes the room for everyone. */
