@@ -1117,6 +1117,35 @@ function teamsForDraw(draw) {
     .sort((a, b) => (a.teamName || '').localeCompare(b.teamName || ''));
 }
 
+/** Whether this device has joined somebody else's tournament. */
+function isGuestDraw(drawId) {
+  const m = Room.forDraw(drawId);
+  return !!m && !m.host;
+}
+
+/**
+ * The teams actually in this draw: placed in a group, picked straight in, or
+ * already drawn in the bracket. A joined device sees only these. The teams
+ * registered on that device are its own business and have nothing to do with
+ * the host's tournament, so they must never appear here.
+ */
+function teamsInDraw(draw) {
+
+  const names = new Set();
+
+  qualifiedTeams(draw).forEach(t => names.add(t.name));
+  (draw.groups || []).forEach(g => (g.teams || []).forEach(n => names.add(n)));
+
+  (draw.bracket || []).forEach(tie => {
+    if (tie.a) names.add(tie.a);
+    if (tie.b) names.add(tie.b);
+  });
+
+  return [...names]
+    .sort((a, b) => (a || '').localeCompare(b || ''))
+    .map(name => ({ teamName: name }));
+}
+
 /** The group a team came through, if it came through one. */
 function groupOf(draw, name) {
 
@@ -1143,14 +1172,16 @@ function teamPickCard(draw) {
   const card = document.createElement('div');
   card.className = 'card';
 
-  const registered = teamsForDraw(draw);
+  const guest = isGuestDraw(draw.id);
+  const registered = guest ? teamsInDraw(draw) : teamsForDraw(draw);
 
   card.innerHTML = `<h2>Teams in this draw</h2>`;
 
   if (!registered.length) {
-    card.insertAdjacentHTML('beforeend',
-      `<div class="empty">No ${esc(draw.teamType)} ${esc(draw.category)} teams `
-      + `are registered yet</div>`);
+    card.insertAdjacentHTML('beforeend', guest
+      ? `<div class="empty">The host has not put any teams in this draw yet</div>`
+      : `<div class="empty">No ${esc(draw.teamType)} ${esc(draw.category)} teams `
+        + `are registered yet</div>`);
     return card;
   }
 
@@ -1168,8 +1199,9 @@ function teamPickCard(draw) {
     tick.className = 'qual';
     tick.checked = !!from || (draw.picked || []).includes(name);
 
-    // a team that came through a group is managed on the Groups tab, not here
-    tick.disabled = !!from;
+    // a team that came through a group is managed on the Groups tab, not here,
+    // and a joined device changes nothing at all
+    tick.disabled = !!from || guest;
     tick.title = from ? 'Came through ' + from : 'In the draw';
 
     tick.onchange = () => {
@@ -1554,17 +1586,22 @@ function renderGroups() {
     return;
   }
 
-  // only this draw's own side and age group, and only teams not already placed
-  const eligible = Teams.all().filter(t =>
+  // only this draw's own side and age group, and only teams not already placed.
+  // A joined device gets nothing to pick from: it may see the teams the host
+  // put in the tournament, never the ones registered on it.
+  const guest = isGuestDraw(draw.id);
+
+  const eligible = guest ? [] : Teams.all().filter(t =>
     (t.teamType || 'Men') === draw.teamType && (t.category || 'Open') === draw.category);
 
   const placed = new Set();
   groups.forEach(g => (g.teams || []).forEach(n => placed.add(n)));
 
-  groups.forEach((group, gi) => box.appendChild(groupCard(draw, group, gi, eligible, placed)));
+  groups.forEach((group, gi) =>
+    box.appendChild(groupCard(draw, group, gi, eligible, placed, guest)));
 }
 
-function groupCard(draw, group, gi, eligible, placed) {
+function groupCard(draw, group, gi, eligible, placed, guest) {
   const card = document.createElement('div');
   card.className = 'card';
 
@@ -1640,6 +1677,10 @@ function groupCard(draw, group, gi, eligible, placed) {
     row.appendChild(out);
     card.appendChild(row);
   });
+
+  // a joined device stops here: no picker, and no "none registered" notice,
+  // because the teams on it are not part of this tournament
+  if (guest) return card;
 
   // what is left to pick from
   const free = eligible.filter(t => !placed.has(t.teamName));
