@@ -476,3 +476,27 @@ table.sheet tr.editable:hover td { background: #ffffff12; }
   letter-spacing: 2px;
   text-transform: uppercase;
 }
+
+/* The pull-down-to-refresh tab. Sits off the top of the screen and rides down
+   under the finger, so it only ever appears when it is being asked for. */
+#pullbar {
+  position: fixed;
+  top: -44px;
+  left: 0;
+  right: 0;
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--green, #16a34a);
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+
+#pullbar.on { opacity: 1; }
+
+#sheetRefresh, #ddRefresh { margin-bottom: 12px; }

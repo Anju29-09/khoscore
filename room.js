@@ -39,6 +39,7 @@ const Room = (() => {
 
   let pushTimer = null;
   let applying = false;   // true while writing an incoming record, to not echo it
+  let lastTrouble = '';   // the last thing the server complained about
 
   /* ---------------- what this device remembers ---------------- */
 
@@ -287,9 +288,9 @@ const Room = (() => {
         snap.docChanges().forEach(ch => {
           if (applyRecord(ch.doc.id, ch.doc.data())) changed++;
         });
-        if (changed) tell({ type: 'records', changed });
+        if (changed) tell({ type: 'records', changed, drawId });
       },
-      () => {}
+      err => trouble(err, drawId)
     );
 
     // the host ending the room, or the code being regenerated, arrives here
@@ -305,10 +306,68 @@ const Room = (() => {
           else { tell({ type: 'ended', regenerated: true, drawId }); forget(drawId); }
         }
       },
-      () => {}
+      err => trouble(err, drawId)
     );
 
     tell({ type: 'joined', drawId });
+  }
+
+  /**
+   * A listener that stops working is the one failure that must not be silent:
+   * from the outside it looks exactly like nothing syncing, which is the hardest
+   * thing of all to tell apart from a quiet afternoon.
+   */
+  function trouble(err, drawId) {
+    const code = (err && err.code) || String(err || 'unknown');
+    lastTrouble = code;
+    tell({ type: 'trouble', code, drawId });
+  }
+
+  /**
+   * Pulls the whole room from the server now, then sends up anything local that
+   * has not gone yet. The live listener normally keeps up by itself; this is for
+   * when it has not, and it is what the Refresh button and the pull-down run.
+   */
+  async function refresh(drawId) {
+
+    if (!forDraw(drawId)) return 0;
+
+    if (!lives.has(drawId)) await reopen(drawId);
+
+    const live = liveFor(drawId);
+    if (!live) return 0;
+
+    const { db, fs } = await Cloud.firestore();
+    const ref = fs.collection(db, 'rooms', live.roomId, 'records');
+
+    // from the server, not the local copy - a refresh that handed back what we
+    // already had would be no refresh at all
+    let snap;
+    try {
+      snap = fs.getDocsFromServer ? await fs.getDocsFromServer(ref) : await fs.getDocs(ref);
+    } catch (e) {
+      snap = await fs.getDocs(ref);          // offline: the copy is better than nothing
+    }
+
+    let changed = 0;
+    snap.forEach(d => { if (applyRecord(d.id, d.data())) changed++; });
+
+    await push(live);
+
+    return changed;
+  }
+
+  /** Refreshes every shared tournament. Returns how many records came in. */
+  async function refreshAll() {
+
+    let changed = 0;
+
+    for (const drawId of Object.keys(memberships())) {
+      try { changed += await refresh(drawId); }
+      catch (e) { trouble(e, drawId); throw e; }
+    }
+
+    return changed;
   }
 
   /** Disconnects one room, leaving every other one alone. */
@@ -562,6 +621,7 @@ const Room = (() => {
   return {
     forDraw, canEdit, code, isLive, isHost, isLiveFor,
     createFor, join, leave, end, regenerate, reopen, restoreAll,
+    refresh, refreshAll, lastTrouble: () => lastTrouble,
     stop, stopOne,
     tidyCode,
     watch(fn) { listeners.push(fn); }

@@ -2005,6 +2005,114 @@ function renderDrawTabButtons(drawId) {
   $('#shCode').textContent = '';
 }
 
+/**
+ * Fetches every device's sheets for the shared tournaments now, and sends up
+ * anything of ours that has not gone. Wired to the Refresh buttons and to the
+ * pull-down, because a scorer who has just finished a match wants to see the
+ * other court's result this minute, not whenever the listener notices.
+ */
+let refreshing = false;
+
+async function syncNow(quiet) {
+
+  if (refreshing) return;
+
+  const rooms = Object.keys(DB.read('rooms', {}));
+
+  if (!rooms.length) {
+    if (!quiet) toast('This tournament is not shared with any other device');
+    return;
+  }
+
+  refreshing = true;
+  setRefreshBusy(true);
+
+  try {
+    const changed = await Room.refreshAll();
+
+    // whatever came in, redraw what is on screen so it shows at once
+    renderSheets();
+    renderDraws();
+    if (current === 'drawdetail' && openDrawId) {
+      renderGroups();
+      renderDrawTab();
+    }
+
+    if (!quiet) {
+      toast(changed
+        ? 'Up to date - ' + changed + (changed === 1 ? ' change' : ' changes') + ' came in'
+        : 'Up to date');
+    }
+
+  } catch (e) {
+    toast('Could not refresh: ' + roomError(e, false), 5000);
+
+  } finally {
+    refreshing = false;
+    setRefreshBusy(false);
+  }
+}
+
+function setRefreshBusy(on) {
+  ['#sheetRefresh', '#ddRefresh'].forEach(sel => {
+    const b = $(sel);
+    if (!b) return;
+    b.disabled = on;
+    b.textContent = on ? 'Refreshing…' : '↻ Refresh';
+  });
+}
+
+/* Both Refresh buttons, and a pull down from the top on a phone. */
+(function wireRefresh() {
+
+  const hook = sel => {
+    const b = $(sel);
+    if (b) b.onclick = () => syncNow(false);
+  };
+
+  hook('#sheetRefresh');
+  hook('#ddRefresh');
+
+  /* Pull down from the top of the page to refresh, the way a phone expects. */
+  const bar = document.createElement('div');
+  bar.id = 'pullbar';
+  document.body.appendChild(bar);
+
+  let armed = false, dy = 0;
+
+  const atTop = () =>
+    (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0) <= 1;
+
+  const show = d => {
+    dy = d;
+    bar.style.transform = 'translateY(' + Math.min(d, 90) + 'px)';
+    bar.textContent = d >= 70 ? 'Release to refresh' : 'Pull to refresh';
+    bar.classList.add('on');
+  };
+
+  const hide = () => { bar.classList.remove('on'); bar.style.transform = ''; dy = 0; };
+
+  document.addEventListener('touchstart', e => {
+    armed = e.touches.length === 1 && atTop() && Object.keys(DB.read('rooms', {})).length > 0;
+    dy = 0;
+    if (armed) bar.dataset.y = e.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!armed) return;
+    const moved = e.touches[0].clientY - Number(bar.dataset.y || 0);
+    if (moved > 12) show(moved); else if (dy) hide();
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!armed) return;
+    const go = dy >= 70;
+    armed = false;
+    hide();
+    if (go) syncNow(false);
+  }, { passive: true });
+})();
+
 /** The link that drops someone straight into this room. */
 function joinLink(code) {
   return location.origin + location.pathname + '?join=' + encodeURIComponent(code);
@@ -2201,7 +2309,36 @@ function roomEvent(event) {
     return;
   }
 
+  if (event.type === 'trouble') {
+
+    // The sync has stopped working. Saying so plainly is the whole point: from
+    // the outside, silence here is indistinguishable from a quiet afternoon,
+    // and that is what made this so hard to pin down.
+    if (troubleShown === event.code) return;
+    troubleShown = event.code;
+
+    toast('Sharing stopped - ' + troubleWords(event.code)
+          + '. Tap Refresh to try again.', 6000);
+    return;
+  }
+
   if (event.type === 'code' && current === 'drawdetail') renderShare();
+}
+
+/** The last thing the server complained about, so it is said once, not each time. */
+let troubleShown = '';
+
+/** Plain words for why sharing stopped. */
+function troubleWords(code) {
+
+  if (code === 'permission-denied') return 'this device is no longer in the room';
+  if (code === 'unauthenticated') return 'this device is not signed in to the room';
+
+  if (code === 'unavailable' || code === 'auth/network-request-failed') {
+    return 'no connection';
+  }
+
+  return code;
 }
 
 /** Reconnects to whichever room this draw belongs to, when one is opened. */
