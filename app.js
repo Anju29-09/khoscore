@@ -1955,7 +1955,7 @@ $('#ddLeaveTab').onclick = async () => {
 
   if (answer !== 'yes') return;
 
-  await Room.leave();
+  await Room.leave(openDrawId);
   toast('Left the tournament');
   go('draws');
 };
@@ -2069,7 +2069,7 @@ $('#shNewCodeBtn').onclick = async () => {
   if (answer !== 'yes') return;
 
   try {
-    const fresh = await Room.regenerate();
+    const fresh = await Room.regenerate(openDrawId);
     toast('New code: ' + fresh, 4000);
   } catch (e) {
     toast(roomError(e), 4500);
@@ -2088,7 +2088,7 @@ $('#shEndBtn').onclick = async () => {
   if (answer !== 'yes') return;
 
   try {
-    await Room.end();
+    await Room.end(openDrawId);
     toast('Session ended');
   } catch (e) {
     toast(roomError(e), 4500);
@@ -2206,8 +2206,9 @@ function roomEvent(event) {
 
 /** Reconnects to whichever room this draw belongs to, when one is opened. */
 function reopenRoomFor(drawId) {
-  if (Room.liveDrawId() === drawId) return;
-  Room.stop();
+  // Already connected: leave it be. Every other shared tournament stays
+  // connected too, so opening one draw never cuts the sync of another.
+  if (Room.isLiveFor(drawId)) return;
   Room.reopen(drawId).catch(() => {});
 }
 
@@ -2236,6 +2237,12 @@ function joinFromLink() {
  */
 function wireRoomEvents() {
   Room.watch(roomEvent);
+
+  // Connect every shared tournament now, before anybody opens a draw or starts
+  // scoring. This is what makes a sheet scored on any device reach the others,
+  // and the others' sheets arrive here, whichever screen the app opens on.
+  Room.restoreAll().catch(() => {});
+
   joinFromLink();
 }
 

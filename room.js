@@ -28,7 +28,15 @@ const Room = (() => {
   /** No O/0 or I/1: these get read aloud across a noisy ground. */
   const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  let live = null;        // { roomId, drawId, code, host, stopRecords, stopRoom }
+  /**
+   * Every room this device is connected to, by draw. All of them at once, and
+   * from the moment the app starts - not only the one whose draw happens to be
+   * on screen. A scorer opens the app and goes straight into a match; if a room
+   * were connected only by visiting its draw screen first, that match would
+   * never reach anybody and nobody else's would ever arrive.
+   */
+  const lives = new Map();   // drawId -> { roomId, drawId, code, host, stopRecords, stopRoom }
+
   let pushTimer = null;
   let applying = false;   // true while writing an incoming record, to not echo it
 
@@ -64,10 +72,13 @@ const Room = (() => {
     return !m || m.host === true;
   }
 
-  function code() { return live ? live.code : ''; }
-  function isLive() { return !!live; }
-  function liveDrawId() { return live ? live.drawId : ''; }
-  function isHost() { return !!live && live.host === true; }
+  /** The connected room for one draw, if this device is connected to it. */
+  function liveFor(drawId) { return lives.get(drawId) || null; }
+
+  function isLiveFor(drawId) { return lives.has(drawId); }
+  function code(drawId) { const l = liveFor(drawId); return l ? l.code : ''; }
+  function isLive() { return lives.size > 0; }
+  function isHost(drawId) { const l = liveFor(drawId); return !!l && l.host === true; }
 
   /* ---------------- the code ---------------- */
 
@@ -131,14 +142,19 @@ const Room = (() => {
 
   /** Called after any local save. Waits a moment so a burst becomes one push. */
   function pushSoon() {
-    if (!live || applying) return;
+    if (!lives.size || applying) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => { push().catch(() => {}); }, 500);
+    pushTimer = setTimeout(pushAll, 500);
   }
 
-  async function push() {
+  /** A save may belong to any shared tournament, so offer it to every room. */
+  function pushAll() {
+    lives.forEach(live => { push(live).catch(() => {}); });
+  }
 
-    if (!live) return;
+  async function push(live) {
+
+    if (!live || !lives.has(live.drawId)) return;
 
     const draw = Draws.byId(live.drawId);
     if (!draw) return;
@@ -253,11 +269,16 @@ const Room = (() => {
 
   async function attach(roomId, drawId, roomCode, host) {
 
+    // An identity first. Without one the server sees a stranger, and every
+    // listener below fails quietly - which looks exactly like nothing syncing.
+    await Cloud.ensureUser();
+
     const { db, fs } = await Cloud.firestore();
 
-    stop();
+    stopOne(drawId);
 
-    live = { roomId, drawId, code: roomCode, host, stopRecords: null, stopRoom: null };
+    const live = { roomId, drawId, code: roomCode, host, stopRecords: null, stopRoom: null };
+    lives.set(drawId, live);
 
     live.stopRecords = fs.onSnapshot(
       fs.collection(db, 'rooms', roomId, 'records'),
@@ -278,27 +299,47 @@ const Room = (() => {
         const d = snap.data();
         if (!d) return;
 
-        if (d.ended) { tell({ type: 'ended' }); forget(drawId); return; }
-        if (d.code && live && d.code !== live.code) {
-          if (live.host) { live.code = d.code; tell({ type: 'code' }); }
-          else { tell({ type: 'ended', regenerated: true }); forget(drawId); }
+        if (d.ended) { tell({ type: 'ended', drawId }); forget(drawId); return; }
+        if (d.code && d.code !== live.code) {
+          if (live.host) { live.code = d.code; tell({ type: 'code', drawId }); }
+          else { tell({ type: 'ended', regenerated: true, drawId }); forget(drawId); }
         }
       },
       () => {}
     );
 
-    tell({ type: 'joined' });
+    tell({ type: 'joined', drawId });
   }
 
-  function stop() {
+  /** Disconnects one room, leaving every other one alone. */
+  function stopOne(drawId) {
+    const live = lives.get(drawId);
     if (!live) return;
     try { live.stopRecords && live.stopRecords(); } catch (e) {}
     try { live.stopRoom && live.stopRoom(); } catch (e) {}
-    live = null;
+    lives.delete(drawId);
   }
 
+  function stop() {
+    [...lives.keys()].forEach(stopOne);
+  }
+
+  /**
+   * Reconnects every tournament this device is sharing or has joined. Called
+   * once when the app starts, so scoring syncs wherever the scorer begins and
+   * other devices' sheets arrive without anyone opening the draw first.
+   */
+  async function restoreAll() {
+    const ids = Object.keys(memberships());
+    for (const drawId of ids) {
+      try { await reopen(drawId); } catch (e) {}
+    }
+    return ids.length;
+  }
+
+  /** Disconnects and un-remembers one room. Every other room carries on. */
   function forget(drawId) {
-    stop();
+    stopOne(drawId);
     remember(drawId, null);
   }
 
@@ -412,8 +453,9 @@ const Room = (() => {
    * were really played, and throwing away a scorer's own afternoon because they
    * tapped Leave would be its own kind of bug.
    */
-  async function leave() {
+  async function leave(forDrawId) {
 
+    const live = liveFor(forDrawId);
     if (!live) return;
 
     const { roomId, drawId, host } = live;
@@ -443,8 +485,9 @@ const Room = (() => {
   }
 
   /** Host only. Closes the room for everyone. */
-  async function end() {
+  async function end(forDrawId) {
 
+    const live = liveFor(forDrawId);
     if (!live || !live.host) return;
 
     const { roomId, drawId, code: old } = live;
@@ -460,8 +503,9 @@ const Room = (() => {
   }
 
   /** Host only. New code, old one dead, everyone else dropped. */
-  async function regenerate() {
+  async function regenerate(forDrawId) {
 
+    const live = liveFor(forDrawId);
     if (!live || !live.host) return '';
 
     const { roomId, old } = { roomId: live.roomId, old: live.code };
@@ -516,8 +560,9 @@ const Room = (() => {
   })();
 
   return {
-    forDraw, canEdit, code, isLive, isHost, liveDrawId,
-    createFor, join, leave, end, regenerate, reopen, stop,
+    forDraw, canEdit, code, isLive, isHost, isLiveFor,
+    createFor, join, leave, end, regenerate, reopen, restoreAll,
+    stop, stopOne,
     tidyCode,
     watch(fn) { listeners.push(fn); }
   };

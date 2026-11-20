@@ -194,6 +194,11 @@ const Cloud = (() => {
 
     const { auth, authMod } = await load();
 
+    // Let a remembered sign-in come back first. Firebase restores it a moment
+    // after loading, and deciding nobody is here before that would sign a host
+    // in anonymously and shut them out of their own tournament.
+    try { if (auth.authStateReady) await auth.authStateReady(); } catch (e) {}
+
     if (auth.currentUser) return auth.currentUser;
 
     const cred = await authMod.signInAnonymously(auth);
