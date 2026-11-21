@@ -1262,12 +1262,75 @@ function matchBetween(draw, a, b) {
   return played.length ? played[played.length - 1] : null;
 }
 
-/** Who goes through from one tie: the bye, the winner, or nobody yet. */
+/**
+ * Who goes through from one tie: the bye, the winner, or nobody yet.
+ *
+ * A score sheet on this device settles it. Failing that, the result the host
+ * stamped onto the draw does - which is what lets a joined device show a
+ * correct bracket without holding every other device's score sheets.
+ */
 function tieWinner(draw, tie) {
   if (!tie.b) return tie.a;                       // a bye walks through
 
   const m = matchBetween(draw, tie.a, tie.b);
-  return m ? m.winner : null;
+  if (m) return m.winner;
+
+  return tie.winner || null;
+}
+
+/**
+ * Writes each decided tie's result onto the draw itself.
+ *
+ * Only the device that owns the draw does this, because the draw is its to
+ * change. It is what carries results out to everybody: the sheets go up to the
+ * host, the host settles the ties, and the draw - one small record - goes back
+ * out to every device. Nobody else needs anybody else's score sheets to see a
+ * correct bracket.
+ */
+function stampDrawResults(drawId) {
+
+  const draw = Draws.byId(drawId);
+  if (!draw || !Room.canEdit(drawId)) return false;
+
+  let changed = false;
+
+  (draw.bracket || []).forEach(tie => {
+
+    if (!tie.b) return;
+
+    const m = matchBetween(draw, tie.a, tie.b);
+    const won = m ? m.winner : null;
+
+    if (won) {
+      if (tie.winner !== won) { tie.winner = won; changed = true; }
+
+    } else if (tie.winner) {
+      // the sheet that settled this has gone, so the tie is open again
+      delete tie.winner;
+      changed = true;
+    }
+  });
+
+  if (!changed) return false;
+
+  const list = Draws.all();
+  const i = list.findIndex(d => d.id === draw.id);
+
+  if (i < 0) return false;
+
+  list[i] = draw;
+  Draws.save(list);        // which sends the draw up to everybody
+
+  return true;
+}
+
+/** The same for every tournament this device is sharing. */
+function stampSharedDraws() {
+  let any = false;
+  Object.keys(DB.read('rooms', {})).forEach(id => {
+    try { if (stampDrawResults(id)) any = true; } catch (e) {}
+  });
+  return any;
 }
 
 /**
@@ -2030,6 +2093,10 @@ async function syncNow(quiet) {
   try {
     const changed = await Room.refreshAll();
 
+    // sheets may have arrived from another device: settle any tie they decide,
+    // which sends the updated draw back out to everybody
+    stampSharedDraws();
+
     // whatever came in, redraw what is on screen so it shows at once
     renderSheets();
     renderDraws();
@@ -2066,6 +2133,85 @@ async function syncNow(quiet) {
   }
 }
 
+/**
+ * Says what this device sees, so a sync that is not working can be read rather
+ * than guessed at. Deliberately plain: it is meant to be screenshotted or
+ * copied and sent to somebody who can act on it.
+ */
+async function syncCheck() {
+
+  const box = $('#syncReport');
+  if (!box) return;
+
+  box.style.display = '';
+  box.textContent = 'Checking…';
+
+  const lines = [];
+
+  lines.push('KhoTrack sync check');
+  lines.push(new Date().toString());
+  lines.push('');
+
+  const rooms = DB.read('rooms', {});
+  const ids = Object.keys(rooms);
+
+  lines.push('Shared tournaments on this device: ' + ids.length);
+  lines.push('Score sheets on this device: ' + Matches.all().length);
+  lines.push('Teams registered here: ' + Teams.all().length);
+  lines.push('');
+
+  if (!ids.length) {
+    lines.push('This device is not sharing or joined to anything.');
+    lines.push('A host opens the tournament and taps Share; everyone else');
+    lines.push('joins with the code.');
+    box.textContent = lines.join('\n');
+    return;
+  }
+
+  let reports = [];
+
+  try {
+    reports = await Room.diagnoseAll();
+  } catch (e) {
+    lines.push('Could not check: ' + ((e && e.code) || (e && e.message) || e));
+    box.textContent = lines.join('\n');
+    return;
+  }
+
+  reports.forEach(r => {
+
+    lines.push('--- ' + (r.tournament || r.drawId) + ' ---');
+    lines.push('this device is: ' + r.role);
+    lines.push('connected to the room: ' + (r.connected ? 'yes' : 'NO'));
+    lines.push('signed in as: ' + r.uid);
+    lines.push('the draw is on this device: ' + (r.drawHere ? 'yes' : 'NO'));
+    lines.push('tournament days: ' + ((r.dates || []).join(',  ') || '(none)'));
+    lines.push('side / age group: ' + r.side + ' ' + r.age);
+
+    if (r.serverError) {
+      lines.push('THE ROOM REFUSED THIS DEVICE: ' + r.serverError);
+    } else if (r.serverHolds === null) {
+      lines.push('the room was not read (not connected)');
+    } else {
+      lines.push('records in the room: ' + r.serverHolds.length);
+      if (r.serverHolds.length) lines.push('   ' + r.serverHolds.join(', '));
+    }
+
+    lines.push('sheets this device will send: ' + (r.willSend || []).length);
+    (r.willSend || []).forEach(x => lines.push('   ' + x));
+
+    if ((r.wontSend || []).length) {
+      lines.push('sheets this device will NOT send: ' + r.wontSend.length);
+      r.wontSend.forEach(x => lines.push('   ' + x));
+    }
+
+    lines.push('last problem reported: ' + r.trouble);
+    lines.push('');
+  });
+
+  box.textContent = lines.join('\n');
+}
+
 function setRefreshBusy(on) {
   ['#sheetRefresh', '#ddRefresh'].forEach(sel => {
     const b = $(sel);
@@ -2074,6 +2220,18 @@ function setRefreshBusy(on) {
     b.textContent = on ? 'Refreshing…' : '↻ Refresh';
   });
 }
+
+/* Settling the ties is part of saving a score sheet, on the host. Wrapping the
+   store catches every route in - scoring, editing, deleting, and sheets that
+   arrive from another device - without a call scattered through each of them. */
+(function stampOnSave() {
+  const original = Matches.save.bind(Matches);
+  Matches.save = function (list) {
+    const result = original(list);
+    try { stampSharedDraws(); } catch (e) {}
+    return result;
+  };
+})();
 
 /* Both Refresh buttons, and a pull down from the top on a phone. */
 (function wireRefresh() {
@@ -2085,6 +2243,16 @@ function setRefreshBusy(on) {
 
   hook('#sheetRefresh');
   hook('#ddRefresh');
+
+  const chk = $('#syncCheckBtn');
+  if (chk) chk.onclick = () => syncCheck();
+
+  const cp = $('#syncCopyBtn');
+  if (cp) cp.onclick = async () => {
+    const t = $('#syncReport').textContent || '';
+    try { await navigator.clipboard.writeText(t); toast('Sync check copied'); }
+    catch (e) { toast('Select the text and copy it by hand', 4000); }
+  };
 
   /* Pull down from the top of the page to refresh, the way a phone expects. */
   const bar = document.createElement('div');

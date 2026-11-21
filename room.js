@@ -438,6 +438,82 @@ const Room = (() => {
     return { changed, ids };
   }
 
+  /**
+   * What this device actually thinks, in plain terms, for one tournament. Built
+   * because the sync can fail in several ways that all look identical from the
+   * outside, and guessing between them from a distance does not work.
+   */
+  async function diagnose(drawId) {
+
+    const m = forDraw(drawId);
+    const draw = Draws.byId(drawId);
+
+    const info = {
+      drawId,
+      role: m ? (m.host ? 'host' : 'joined') : 'not shared',
+      connected: lives.has(drawId),
+      uid: Cloud.uid() || '(none)',
+      drawHere: !!draw,
+      tournament: draw ? (draw.tournament || '(no name)') : '(not on this device)',
+      dates: draw ? drawDates(draw) : [],
+      side: draw ? draw.teamType : '',
+      age: draw ? draw.category : '',
+      sheetsHere: Matches.all().length,
+      willSend: [],
+      wontSend: [],
+      serverHolds: null,
+      serverError: '',
+      trouble: lastTrouble || '(none)'
+    };
+
+    if (draw) {
+      const days = new Set(drawDates(draw).map(dateKey));
+
+      Matches.all().forEach(x => {
+
+        const label = (x.team1Name || '?') + ' v ' + (x.team2Name || '?')
+                    + '  [' + (x.date || 'no date') + ']';
+
+        let why = '';
+
+        if (!x.id) why = 'no tag';
+        else if (!days.has(dateKey(x.date))) why = 'its date is not one of the tournament days';
+        else if ((x.teamType || 'Men') !== draw.teamType) {
+          why = 'side is ' + (x.teamType || 'Men') + ', tournament is ' + draw.teamType;
+        } else if ((x.category || 'Open') !== draw.category) {
+          why = 'age group is ' + (x.category || 'Open') + ', tournament is ' + draw.category;
+        }
+
+        if (why) info.wontSend.push(label + '  ->  ' + why);
+        else info.willSend.push(label);
+      });
+    }
+
+    if (lives.has(drawId)) {
+      try {
+        const got = await pull(liveFor(drawId));
+        info.serverHolds = [...got.ids];
+      } catch (e) {
+        info.serverError = (e && e.code) || (e && e.message) || String(e);
+      }
+    }
+
+    return info;
+  }
+
+  /** The same for every shared tournament on this device. */
+  async function diagnoseAll() {
+
+    const out = [];
+
+    for (const drawId of Object.keys(memberships())) {
+      try { out.push(await diagnose(drawId)); }
+      catch (e) { out.push({ drawId, serverError: (e && e.code) || String(e) }); }
+    }
+
+    return out;
+  }
+
   /** Refreshes every shared tournament. Returns how many records came in. */
   async function refreshAll() {
 
@@ -705,7 +781,8 @@ const Room = (() => {
   return {
     forDraw, canEdit, code, isLive, isHost, isLiveFor,
     createFor, join, leave, end, regenerate, reopen, restoreAll,
-    refresh, refreshAll, rejoin, lastTrouble: () => lastTrouble,
+    refresh, refreshAll, rejoin, diagnose, diagnoseAll,
+    lastTrouble: () => lastTrouble,
     stop, stopOne,
     tidyCode,
     watch(fn) { listeners.push(fn); }

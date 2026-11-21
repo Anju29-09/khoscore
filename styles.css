@@ -500,3 +500,23 @@ table.sheet tr.editable:hover td { background: #ffffff12; }
 #pullbar.on { opacity: 1; }
 
 #sheetRefresh, #ddRefresh { margin-bottom: 12px; }
+
+/* The sync check report. Small, scrollable, and selectable, because its whole
+   job is to be read and passed on. */
+#syncReport {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, .35);
+  border: 1px solid rgba(255, 255, 255, .12);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 60vh;
+  overflow: auto;
+  user-select: all;
+}
+
+#syncCheckBtn, #syncCopyBtn { margin-bottom: 12px; }
