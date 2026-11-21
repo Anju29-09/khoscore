@@ -2013,14 +2013,22 @@ $('#ddShareTab').onclick = showShareTab;
 $('#ddLeaveTab').onclick = async () => {
 
   const answer = await ask('Leave this tournament?',
-    'It stops updating on this device. What you already have stays.',
+    'It is removed from this device, along with its score sheets and the teams '
+    + 'playing in it. The host keeps all of it. Your own teams and your other '
+    + 'tournaments are not touched.',
     { yes: 'Leave', no: 'Stay' });
 
   if (answer !== 'yes') return;
 
   await Room.leave(openDrawId);
+
+  openDrawId = null;
   toast('Left the tournament');
   go('draws');
+
+  renderDraws();
+  renderSheets();
+  renderTeams();
 };
 
 function renderShare() {
@@ -2133,85 +2141,6 @@ async function syncNow(quiet) {
   }
 }
 
-/**
- * Says what this device sees, so a sync that is not working can be read rather
- * than guessed at. Deliberately plain: it is meant to be screenshotted or
- * copied and sent to somebody who can act on it.
- */
-async function syncCheck() {
-
-  const box = $('#syncReport');
-  if (!box) return;
-
-  box.style.display = '';
-  box.textContent = 'Checking…';
-
-  const lines = [];
-
-  lines.push('KhoTrack sync check');
-  lines.push(new Date().toString());
-  lines.push('');
-
-  const rooms = DB.read('rooms', {});
-  const ids = Object.keys(rooms);
-
-  lines.push('Shared tournaments on this device: ' + ids.length);
-  lines.push('Score sheets on this device: ' + Matches.all().length);
-  lines.push('Teams registered here: ' + Teams.all().length);
-  lines.push('');
-
-  if (!ids.length) {
-    lines.push('This device is not sharing or joined to anything.');
-    lines.push('A host opens the tournament and taps Share; everyone else');
-    lines.push('joins with the code.');
-    box.textContent = lines.join('\n');
-    return;
-  }
-
-  let reports = [];
-
-  try {
-    reports = await Room.diagnoseAll();
-  } catch (e) {
-    lines.push('Could not check: ' + ((e && e.code) || (e && e.message) || e));
-    box.textContent = lines.join('\n');
-    return;
-  }
-
-  reports.forEach(r => {
-
-    lines.push('--- ' + (r.tournament || r.drawId) + ' ---');
-    lines.push('this device is: ' + r.role);
-    lines.push('connected to the room: ' + (r.connected ? 'yes' : 'NO'));
-    lines.push('signed in as: ' + r.uid);
-    lines.push('the draw is on this device: ' + (r.drawHere ? 'yes' : 'NO'));
-    lines.push('tournament days: ' + ((r.dates || []).join(',  ') || '(none)'));
-    lines.push('side / age group: ' + r.side + ' ' + r.age);
-
-    if (r.serverError) {
-      lines.push('THE ROOM REFUSED THIS DEVICE: ' + r.serverError);
-    } else if (r.serverHolds === null) {
-      lines.push('the room was not read (not connected)');
-    } else {
-      lines.push('records in the room: ' + r.serverHolds.length);
-      if (r.serverHolds.length) lines.push('   ' + r.serverHolds.join(', '));
-    }
-
-    lines.push('sheets this device will send: ' + (r.willSend || []).length);
-    (r.willSend || []).forEach(x => lines.push('   ' + x));
-
-    if ((r.wontSend || []).length) {
-      lines.push('sheets this device will NOT send: ' + r.wontSend.length);
-      r.wontSend.forEach(x => lines.push('   ' + x));
-    }
-
-    lines.push('last problem reported: ' + r.trouble);
-    lines.push('');
-  });
-
-  box.textContent = lines.join('\n');
-}
-
 function setRefreshBusy(on) {
   ['#sheetRefresh', '#ddRefresh'].forEach(sel => {
     const b = $(sel);
@@ -2244,15 +2173,6 @@ function setRefreshBusy(on) {
   hook('#sheetRefresh');
   hook('#ddRefresh');
 
-  const chk = $('#syncCheckBtn');
-  if (chk) chk.onclick = () => syncCheck();
-
-  const cp = $('#syncCopyBtn');
-  if (cp) cp.onclick = async () => {
-    const t = $('#syncReport').textContent || '';
-    try { await navigator.clipboard.writeText(t); toast('Sync check copied'); }
-    catch (e) { toast('Select the text and copy it by hand', 4000); }
-  };
 
   /* Pull down from the top of the page to refresh, the way a phone expects. */
   const bar = document.createElement('div');
@@ -2461,13 +2381,24 @@ function roomError(e, joining) {
 function roomEvent(event) {
 
   if (event.type === 'ended') {
+
     ask('Session ended',
-        event.regenerated
+        (event.regenerated
           ? 'The host has issued a new code. Ask them for it to join again.'
-          : 'The host has ended this session.',
+          : 'The host has ended this session.')
+        + ' The tournament, its score sheets and its teams have been removed '
+        + 'from this device. The host still has them all.',
         { yes: 'OK', no: null });
 
-    if (current === 'drawdetail') { renderDrawTabButtons(openDrawId); renderShare(); }
+    // the tournament has just gone, so leave its screen before redrawing
+    if (current === 'drawdetail' && (!event.drawId || openDrawId === event.drawId)) {
+      openDrawId = null;
+      go('draws');
+    }
+
+    renderDraws();
+    renderSheets();
+    renderTeams();
     return;
   }
 

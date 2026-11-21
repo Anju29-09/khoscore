@@ -349,10 +349,27 @@ const Room = (() => {
         const d = snap.data();
         if (!d) return;
 
-        if (d.ended) { tell({ type: 'ended', drawId }); forget(drawId); return; }
+        // The host closing the room, or issuing a new code, puts every other
+        // device out. The tournament goes with them: the host keeps the sheets
+        // and the teams, and a device that can no longer be updated should not
+        // sit on a copy that will slowly go stale.
+        if (d.ended) {
+          const guest = !live.host;
+          tell({ type: 'ended', drawId });
+          forget(drawId);
+          if (guest) dropJoined(drawId);
+          return;
+        }
+
         if (d.code && d.code !== live.code) {
-          if (live.host) { live.code = d.code; tell({ type: 'code', drawId }); }
-          else { tell({ type: 'ended', regenerated: true, drawId }); forget(drawId); }
+          if (live.host) {
+            live.code = d.code;
+            tell({ type: 'code', drawId });
+          } else {
+            tell({ type: 'ended', regenerated: true, drawId });
+            forget(drawId);
+            dropJoined(drawId);
+          }
         }
       },
       err => trouble(err, drawId)
@@ -465,82 +482,6 @@ const Room = (() => {
     });
 
     return { changed, ids };
-  }
-
-  /**
-   * What this device actually thinks, in plain terms, for one tournament. Built
-   * because the sync can fail in several ways that all look identical from the
-   * outside, and guessing between them from a distance does not work.
-   */
-  async function diagnose(drawId) {
-
-    const m = forDraw(drawId);
-    const draw = Draws.byId(drawId);
-
-    const info = {
-      drawId,
-      role: m ? (m.host ? 'host' : 'joined') : 'not shared',
-      connected: lives.has(drawId),
-      uid: Cloud.uid() || '(none)',
-      drawHere: !!draw,
-      tournament: draw ? (draw.tournament || '(no name)') : '(not on this device)',
-      dates: draw ? drawDates(draw) : [],
-      side: draw ? draw.teamType : '',
-      age: draw ? draw.category : '',
-      sheetsHere: Matches.all().length,
-      willSend: [],
-      wontSend: [],
-      serverHolds: null,
-      serverError: '',
-      trouble: lastTrouble || '(none)'
-    };
-
-    if (draw) {
-      const days = new Set(drawDates(draw).map(dateKey));
-
-      Matches.all().forEach(x => {
-
-        const label = (x.team1Name || '?') + ' v ' + (x.team2Name || '?')
-                    + '  [' + (x.date || 'no date') + ']';
-
-        let why = '';
-
-        if (!x.id) why = 'no tag';
-        else if (!days.has(dateKey(x.date))) why = 'its date is not one of the tournament days';
-        else if ((x.teamType || 'Men') !== draw.teamType) {
-          why = 'side is ' + (x.teamType || 'Men') + ', tournament is ' + draw.teamType;
-        } else if ((x.category || 'Open') !== draw.category) {
-          why = 'age group is ' + (x.category || 'Open') + ', tournament is ' + draw.category;
-        }
-
-        if (why) info.wontSend.push(label + '  ->  ' + why);
-        else info.willSend.push(label);
-      });
-    }
-
-    if (lives.has(drawId)) {
-      try {
-        const got = await pull(liveFor(drawId));
-        info.serverHolds = [...got.ids];
-      } catch (e) {
-        info.serverError = (e && e.code) || (e && e.message) || String(e);
-      }
-    }
-
-    return info;
-  }
-
-  /** The same for every shared tournament on this device. */
-  async function diagnoseAll() {
-
-    const out = [];
-
-    for (const drawId of Object.keys(memberships())) {
-      try { out.push(await diagnose(drawId)); }
-      catch (e) { out.push({ drawId, serverError: (e && e.code) || String(e) }); }
-    }
-
-    return out;
   }
 
   /** Refreshes every shared tournament. Returns how many records came in. */
@@ -718,13 +659,66 @@ const Room = (() => {
     if (!host) dropJoined(drawId);
   }
 
-  /** Takes a tournament this device had only joined back off it. */
+  /**
+   * Takes a tournament this device had only joined back off it: the draw, the
+   * score sheets from its own days, and the teams that were playing in it. The
+   * host keeps all of it - a joined device was only ever borrowing it.
+   *
+   * Two things are deliberately spared: anything another tournament still on
+   * this device needs, and anything this device registered that the tournament
+   * never covered. A scorer's own teams and their other weekends stay put.
+   */
   function dropJoined(drawId) {
 
+    const draw = Draws.byId(drawId);
+    const others = Draws.all().filter(d => d.id !== drawId);
+
+    if (draw) {
+
+      /** Does another tournament here still play this side and age group? */
+      const stillNeeded = (type, cat, day) => others.some(o => {
+        if ((o.teamType || '') !== type || (o.category || '') !== cat) return false;
+        if (day == null) return true;
+        return new Set(drawDates(o).map(dateKey)).has(day);
+      });
+
+      const days = new Set(drawDates(draw).map(dateKey));
+
+      // the score sheets from this tournament's own days
+      Matches.save(Matches.all().filter(m => {
+
+        const day = dateKey(m.date);
+        const type = m.teamType || 'Men';
+        const cat = m.category || 'Open';
+
+        const belongs = days.has(day)
+                     && type === draw.teamType
+                     && cat === draw.category;
+
+        return belongs ? stillNeeded(type, cat, day) : true;
+      }));
+
+      // the teams that were in it, by any route
+      const inDraw = new Set();
+
+      (draw.groups || []).forEach(g => (g.teams || []).forEach(n => inDraw.add(n.toLowerCase())));
+      (draw.picked || []).forEach(n => inDraw.add(n.toLowerCase()));
+      (draw.bracket || []).forEach(t => {
+        if (t.a) inDraw.add(t.a.toLowerCase());
+        if (t.b) inDraw.add(t.b.toLowerCase());
+      });
+
+      Teams.save(Teams.all().filter(t => {
+        if (!inDraw.has((t.teamName || '').toLowerCase())) return true;
+        return stillNeeded(t.teamType || '', t.category || '', null);
+      }));
+    }
+
+    // and the draw itself
     const list = Draws.all();
     const i = list.findIndex(d => d.id === drawId);
 
-    // live is already null by now, so this save starts no push
+    // this room is already disconnected, so these saves start no push to it
     if (i >= 0) { list.splice(i, 1); Draws.save(list); }
 
     const all = revs();
@@ -810,8 +804,7 @@ const Room = (() => {
   return {
     forDraw, canEdit, code, isLive, isHost, isLiveFor,
     createFor, join, leave, end, regenerate, reopen, restoreAll,
-    refresh, refreshAll, rejoin, diagnose, diagnoseAll,
-    lastTrouble: () => lastTrouble,
+    refresh, refreshAll, rejoin, lastTrouble: () => lastTrouble,
     stop, stopOne,
     tidyCode,
     watch(fn) { listeners.push(fn); }
