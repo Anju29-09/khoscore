@@ -196,13 +196,32 @@ const Room = (() => {
 
       const rev = Date.now();
 
-      batch.set(fs.doc(db, 'rooms', live.roomId, 'records', rec.id), {
-        kind: rec.kind,
-        rev,
-        deleted: false,
-        by: Cloud.uid(),
-        data: rec.data
-      });
+      try {
+        batch.set(fs.doc(db, 'rooms', live.roomId, 'records', rec.id), {
+          kind: rec.kind,
+          rev,
+          deleted: false,
+          by: Cloud.uid(),
+
+          // The record travels as text.
+          //
+          // A score sheet keeps one array of events per half, which makes an
+          // array inside an array, and Firestore will not store those. It threw
+          // the moment the write was staged - before any of this was sent - and
+          // because that throw was synchronous it escaped every catch here and
+          // was never reported. The sheets stayed on the device, the draw went
+          // up perfectly well because it has no nested arrays, and the app said
+          // there was nothing to send. As text there is nothing left to object
+          // to: no nested arrays, and no undefined fields either.
+          json: body
+        });
+
+      } catch (e) {
+        // one record Firestore will not take must not silence the rest, and
+        // must never again be invisible
+        trouble(e, live.drawId);
+        return;
+      }
 
       staged.push({ id: rec.id, rev, body });
     });
@@ -217,11 +236,11 @@ const Room = (() => {
       return staged.length;
 
     } catch (e) {
-      // A joined device only ever sends score sheets now, so a refusal here is
-      // not somebody meddling with the draw - the room has stopped recognising
-      // this device. Hand it to trouble, which knows how to get back in. The
-      // records stay unmarked, so the next push tries them again.
-      if (e && e.code === 'permission-denied') trouble(e, live.drawId);
+      // Everything is reported, not only a refusal. A silent failure here is
+      // what hid the real fault for a week: trouble also knows how to get a
+      // device that has been forgotten back into the room. The records stay
+      // unmarked either way, so the next push tries them again.
+      trouble(e, live.drawId);
       return 0;
     }
   }
@@ -230,7 +249,17 @@ const Room = (() => {
 
   function applyRecord(id, doc) {
 
-    if (!doc || !doc.data) return false;
+    if (!doc) return false;
+
+    // Records travel as text now. Anything already sitting in a room from
+    // before that still arrives as a plain object, so both are read.
+    let data = doc.data;
+
+    if (typeof doc.json === 'string') {
+      try { data = JSON.parse(doc.json); } catch (e) { return false; }
+    }
+
+    if (!data) return false;
 
     const mine = revs();
     if (mine[id] && mine[id].rev >= doc.rev) return false;   // already have it
@@ -243,8 +272,8 @@ const Room = (() => {
         const i = list.findIndex(d => d.id === id);
 
         if (doc.deleted) { if (i >= 0) list.splice(i, 1); }
-        else if (i >= 0) list[i] = doc.data;
-        else list.push(doc.data);
+        else if (i >= 0) list[i] = data;
+        else list.push(data);
 
         Draws.save(list);
 
@@ -253,8 +282,8 @@ const Room = (() => {
         const i = list.findIndex(t => t.id === id);
 
         if (doc.deleted) { if (i >= 0) list.splice(i, 1); }
-        else if (i >= 0) list[i] = doc.data;
-        else list.push(doc.data);
+        else if (i >= 0) list[i] = data;
+        else list.push(data);
 
         Teams.save(list);
 
@@ -263,8 +292,8 @@ const Room = (() => {
         const i = list.findIndex(m => m.id === id);
 
         if (doc.deleted) { if (i >= 0) list.splice(i, 1); }
-        else if (i >= 0) list[i] = doc.data;
-        else list.push(doc.data);
+        else if (i >= 0) list[i] = data;
+        else list.push(data);
 
         Matches.save(list);
 
@@ -276,7 +305,7 @@ const Room = (() => {
       applying = false;
     }
 
-    setRev(id, { rev: doc.rev, body: JSON.stringify(doc.data) });
+    setRev(id, { rev: doc.rev, body: JSON.stringify(data) });
     return true;
   }
 
