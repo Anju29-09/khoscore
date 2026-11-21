@@ -41,6 +41,9 @@ const Room = (() => {
   let applying = false;   // true while writing an incoming record, to not echo it
   let lastTrouble = '';   // the last thing the server complained about
 
+  /** Rooms we have already tried to let back in, so one go is all it gets. */
+  const healed = new Set();
+
   /* ---------------- what this device remembers ---------------- */
 
   const memberships = () => DB.read(KEY, {});
@@ -197,12 +200,12 @@ const Room = (() => {
 
     try {
       await batch.commit();
+
     } catch (e) {
-      // a joined device trying to change the draw, or no signal. Either way the
-      // local copy stands and the app carries on.
-      if (e && e.code === 'permission-denied' && !live.host) {
-        toast('Only the host can change this tournament', 3500);
-      }
+      // A joined device only ever sends score sheets now, so a refusal here is
+      // not somebody meddling with the draw - the room has stopped recognising
+      // this device. Hand it to trouble, which knows how to get back in.
+      if (e && e.code === 'permission-denied') trouble(e, live.drawId);
     }
   }
 
@@ -309,6 +312,7 @@ const Room = (() => {
       err => trouble(err, drawId)
     );
 
+    healed.delete(drawId);
     tell({ type: 'joined', drawId });
   }
 
@@ -318,9 +322,38 @@ const Room = (() => {
    * thing of all to tell apart from a quiet afternoon.
    */
   function trouble(err, drawId) {
+
     const code = (err && err.code) || String(err || 'unknown');
     lastTrouble = code;
+
+    // Refused because this device is not in the room any more. Nearly always an
+    // anonymous identity that did not survive a restart: a fresh one means a uid
+    // the room has never heard of, and then every read and write is refused.
+    // The code is still here, so the way back in is simply to join again.
+    if (code === 'permission-denied' && !healed.has(drawId) && canRejoin(drawId)) {
+      healed.add(drawId);
+      rejoin(drawId)
+        .then(() => tell({ type: 'records', changed: 1, drawId }))
+        .catch(() => tell({ type: 'trouble', code, drawId }));
+      return;
+    }
+
     tell({ type: 'trouble', code, drawId });
+  }
+
+  function canRejoin(drawId) {
+    const m = forDraw(drawId);
+    return !!(m && m.code);
+  }
+
+  /** Puts this device back in the room with the code it still holds. */
+  async function rejoin(drawId) {
+
+    const m = forDraw(drawId);
+    if (!m || !m.code) throw new Error('no such code');
+
+    stopOne(drawId);
+    await join(m.code);
   }
 
   /**
@@ -337,22 +370,44 @@ const Room = (() => {
     const live = liveFor(drawId);
     if (!live) return 0;
 
+    let changed = 0;
+
+    try {
+      changed = await pull(live);
+
+    } catch (e) {
+
+      // Forgotten by the room. Get back in with the code and pull again, rather
+      // than telling a referee halfway through a tournament that they cannot.
+      if ((e && e.code) !== 'permission-denied' || !canRejoin(drawId)) throw e;
+
+      await rejoin(drawId);
+      changed = await pull(liveFor(drawId));
+    }
+
+    try { await push(liveFor(drawId)); } catch (e) {}
+
+    return changed;
+  }
+
+  /**
+   * Everything in the room, read from the server rather than the copy on this
+   * device - a refresh that handed back what we already had would be no
+   * refresh at all.
+   */
+  async function pull(live) {
+
+    if (!live) return 0;
+
     const { db, fs } = await Cloud.firestore();
     const ref = fs.collection(db, 'rooms', live.roomId, 'records');
 
-    // from the server, not the local copy - a refresh that handed back what we
-    // already had would be no refresh at all
-    let snap;
-    try {
-      snap = fs.getDocsFromServer ? await fs.getDocsFromServer(ref) : await fs.getDocs(ref);
-    } catch (e) {
-      snap = await fs.getDocs(ref);          // offline: the copy is better than nothing
-    }
+    const snap = fs.getDocsFromServer
+      ? await fs.getDocsFromServer(ref)
+      : await fs.getDocs(ref);
 
     let changed = 0;
     snap.forEach(d => { if (applyRecord(d.id, d.data())) changed++; });
-
-    await push(live);
 
     return changed;
   }
@@ -447,7 +502,10 @@ const Room = (() => {
     remember(draw.id, { roomId, code: roomCode, host: true });
     await attach(roomId, draw.id, roomCode, true);
 
-    await push();
+    // The first upload: the draw, its teams and the sheets already scored.
+    // Without the room it has just attached to, this does nothing at all and a
+    // joining device finds an empty room.
+    await push(liveFor(draw.id));
 
     return roomCode;
   }
@@ -621,7 +679,7 @@ const Room = (() => {
   return {
     forDraw, canEdit, code, isLive, isHost, isLiveFor,
     createFor, join, leave, end, regenerate, reopen, restoreAll,
-    refresh, refreshAll, lastTrouble: () => lastTrouble,
+    refresh, refreshAll, rejoin, lastTrouble: () => lastTrouble,
     stop, stopOne,
     tidyCode,
     watch(fn) { listeners.push(fn); }

@@ -2045,7 +2045,20 @@ async function syncNow(quiet) {
     }
 
   } catch (e) {
-    toast('Could not refresh: ' + roomError(e, false), 5000);
+
+    const code = (e && e.code) || '';
+    const msg = (e && e.message) || '';
+
+    if (code === 'permission-denied') {
+      toast('Could not refresh - this device is no longer in the room. '
+            + 'Ask the host for the code and join again.', 7000);
+
+    } else if (msg === 'no such code') {
+      toast('That session is over - the host ended it or issued a new code.', 6000);
+
+    } else {
+      toast('Could not refresh: ' + troubleWords(code || msg), 5000);
+    }
 
   } finally {
     refreshing = false;
