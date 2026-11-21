@@ -673,6 +673,13 @@ const Room = (() => {
     const draw = Draws.byId(drawId);
     const others = Draws.all().filter(d => d.id !== drawId);
 
+    // What this device has ever had from the room, or sent to it. A joined
+    // device never sends teams, only score sheets, so for a team this is
+    // exactly the test for "came down from the host".
+    const known = revs();
+
+    const forget = [drawId];
+
     if (draw) {
 
       /** Does another tournament here still play this side and age group? */
@@ -684,7 +691,9 @@ const Room = (() => {
 
       const days = new Set(drawDates(draw).map(dateKey));
 
-      // the score sheets from this tournament's own days
+      // The score sheets from this tournament's own days, whoever scored them.
+      // The host has every one of them, and they are the host's record of the
+      // tournament.
       Matches.save(Matches.all().filter(m => {
 
         const day = dateKey(m.date);
@@ -695,7 +704,10 @@ const Room = (() => {
                      && type === draw.teamType
                      && cat === draw.category;
 
-        return belongs ? stillNeeded(type, cat, day) : true;
+        if (!belongs || stillNeeded(type, cat, day)) return true;
+
+        if (m.id) forget.push(m.id);
+        return false;
       }));
 
       // the teams that were in it, by any route
@@ -709,8 +721,17 @@ const Room = (() => {
       });
 
       Teams.save(Teams.all().filter(t => {
+
+        // A team registered on this phone belongs to this phone. It stays even
+        // if it happened to be playing in the tournament - it was registered
+        // here, not for that tournament. Only what came down from the host goes.
+        if (!t.id || !known[t.id]) return true;
+
         if (!inDraw.has((t.teamName || '').toLowerCase())) return true;
-        return stillNeeded(t.teamType || '', t.category || '', null);
+        if (stillNeeded(t.teamType || '', t.category || '', null)) return true;
+
+        forget.push(t.id);
+        return false;
       }));
     }
 
@@ -721,8 +742,11 @@ const Room = (() => {
     // this room is already disconnected, so these saves start no push to it
     if (i >= 0) { list.splice(i, 1); Draws.save(list); }
 
+    // Forget what was known about everything just removed. Otherwise rejoining
+    // later would see records it believes it already has and skip them, and the
+    // tournament would come back empty.
     const all = revs();
-    delete all[drawId];
+    forget.forEach(id => { delete all[id]; });
     DB.write(REVS, all);
   }
 
