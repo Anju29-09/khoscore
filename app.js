@@ -2040,8 +2040,8 @@ async function syncNow(quiet) {
 
     if (!quiet) {
       toast(changed
-        ? 'Up to date - ' + changed + (changed === 1 ? ' change' : ' changes') + ' came in'
-        : 'Up to date');
+        ? 'Up to date - ' + changed + (changed === 1 ? ' change' : ' changes') + ' synced'
+        : 'Up to date - nothing to send or fetch');
     }
 
   } catch (e) {

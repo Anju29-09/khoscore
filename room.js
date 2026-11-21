@@ -156,18 +156,29 @@ const Room = (() => {
     lives.forEach(live => { push(live).catch(() => {}); });
   }
 
-  async function push(live) {
+  /**
+   * Sends up whatever has changed. `serverHas`, when given, is the set of
+   * record ids the room actually holds; anything of ours missing from it goes
+   * up whatever this device believes about it.
+   *
+   * What counts as sent is only ever decided by the server taking it. Marking a
+   * record sent before the commit - which is what this used to do - meant that
+   * one refused upload silenced that score sheet for good: every push after it
+   * saw an unchanged record and skipped it, and the app cheerfully reported
+   * being up to date while the sheet sat on the device for ever.
+   */
+  async function push(live, serverHas) {
 
-    if (!live || !lives.has(live.drawId)) return;
+    if (!live || !lives.has(live.drawId)) return 0;
 
     const draw = Draws.byId(live.drawId);
-    if (!draw) return;
+    if (!draw) return 0;
 
     const { db, fs } = await Cloud.firestore();
     const mine = revs();
     const batch = fs.writeBatch(db);
 
-    let count = 0;
+    const staged = [];
 
     recordsFor(draw).forEach(rec => {
 
@@ -178,9 +189,10 @@ const Room = (() => {
       if (!live.host && rec.kind !== 'match') return;
 
       const body = JSON.stringify(rec.data);
+      const absent = !!serverHas && !serverHas.has(rec.id);
 
       // unchanged since the last push: leave it alone rather than spend a write
-      if (mine[rec.id] && mine[rec.id].body === body) return;
+      if (!absent && mine[rec.id] && mine[rec.id].body === body) return;
 
       const rev = Date.now();
 
@@ -192,20 +204,25 @@ const Room = (() => {
         data: rec.data
       });
 
-      setRev(rec.id, { rev, body });
-      count++;
+      staged.push({ id: rec.id, rev, body });
     });
 
-    if (!count) return;
+    if (!staged.length) return 0;
 
     try {
       await batch.commit();
 
+      // now, and only now, is it true that the room has these
+      staged.forEach(x => setRev(x.id, { rev: x.rev, body: x.body }));
+      return staged.length;
+
     } catch (e) {
       // A joined device only ever sends score sheets now, so a refusal here is
       // not somebody meddling with the draw - the room has stopped recognising
-      // this device. Hand it to trouble, which knows how to get back in.
+      // this device. Hand it to trouble, which knows how to get back in. The
+      // records stay unmarked, so the next push tries them again.
       if (e && e.code === 'permission-denied') trouble(e, live.drawId);
+      return 0;
     }
   }
 
@@ -370,10 +387,10 @@ const Room = (() => {
     const live = liveFor(drawId);
     if (!live) return 0;
 
-    let changed = 0;
+    let got;
 
     try {
-      changed = await pull(live);
+      got = await pull(live);
 
     } catch (e) {
 
@@ -382,12 +399,16 @@ const Room = (() => {
       if ((e && e.code) !== 'permission-denied' || !canRejoin(drawId)) throw e;
 
       await rejoin(drawId);
-      changed = await pull(liveFor(drawId));
+      got = await pull(liveFor(drawId));
     }
 
-    try { await push(liveFor(drawId)); } catch (e) {}
+    // Anything of ours the room does not hold goes up now, whatever this device
+    // thinks it already sent. This is what rescues a sheet left behind by an
+    // upload that failed earlier.
+    let sent = 0;
+    try { sent = await push(liveFor(drawId), got.ids); } catch (e) {}
 
-    return changed;
+    return got.changed + sent;
   }
 
   /**
@@ -397,7 +418,7 @@ const Room = (() => {
    */
   async function pull(live) {
 
-    if (!live) return 0;
+    if (!live) return { changed: 0, ids: new Set() };
 
     const { db, fs } = await Cloud.firestore();
     const ref = fs.collection(db, 'rooms', live.roomId, 'records');
@@ -407,9 +428,14 @@ const Room = (() => {
       : await fs.getDocs(ref);
 
     let changed = 0;
-    snap.forEach(d => { if (applyRecord(d.id, d.data())) changed++; });
+    const ids = new Set();
 
-    return changed;
+    snap.forEach(d => {
+      ids.add(d.id);
+      if (applyRecord(d.id, d.data())) changed++;
+    });
+
+    return { changed, ids };
   }
 
   /** Refreshes every shared tournament. Returns how many records came in. */
