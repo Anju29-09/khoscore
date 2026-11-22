@@ -644,15 +644,22 @@ const Room = (() => {
    */
   async function leave(forDrawId) {
 
-    const live = liveFor(forDrawId);
-    if (!live) return;
+    // From what this device remembers, not from a live connection. Leaving has
+    // to work at a ground with no signal, and before the rooms have finished
+    // reconnecting after the app starts - otherwise the button does nothing at
+    // all and the tournament sits there.
+    const m = forDraw(forDrawId);
+    if (!m) return;
 
-    const { roomId, drawId, host } = live;
+    const drawId = forDrawId;
+    const host = m.host === true;
 
     try {
       const { db, fs } = await Cloud.firestore();
-      await fs.deleteDoc(fs.doc(db, 'rooms', roomId, 'members', Cloud.uid()));
-    } catch (e) {}
+      await fs.deleteDoc(fs.doc(db, 'rooms', m.roomId, 'members', Cloud.uid()));
+    } catch (e) {
+      // no signal, or already out. Either way this device is leaving.
+    }
 
     forget(drawId);
 
@@ -753,10 +760,13 @@ const Room = (() => {
   /** Host only. Closes the room for everyone. */
   async function end(forDrawId) {
 
-    const live = liveFor(forDrawId);
-    if (!live || !live.host) return;
+    // likewise from what is remembered, so ending works on a weak connection
+    const m = forDraw(forDrawId);
+    if (!m || m.host !== true) return;
 
-    const { roomId, drawId, code: old } = live;
+    const roomId = m.roomId;
+    const drawId = forDrawId;
+    const old = m.code;
     const { db, fs } = await Cloud.firestore();
 
     const batch = fs.writeBatch(db);

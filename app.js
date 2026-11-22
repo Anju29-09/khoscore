@@ -1173,15 +1173,27 @@ function teamPickCard(draw) {
   card.className = 'card';
 
   const guest = isGuestDraw(draw.id);
-  const registered = guest ? teamsInDraw(draw) : teamsForDraw(draw);
+
+  // Once there are groups, the field is settled on the Groups tab: the Draw
+  // shows the teams that came through and nobody else. With no groups the
+  // teams are picked straight in here, so the whole register is offered.
+  const grouped = (draw.groups || []).some(g => (g.teams || []).length);
+
+  const registered = grouped
+    ? qualifiedTeams(draw).map(t => ({ teamName: t.name }))
+    : (guest ? teamsInDraw(draw) : teamsForDraw(draw));
 
   card.innerHTML = `<h2>Teams in this draw</h2>`;
 
   if (!registered.length) {
-    card.insertAdjacentHTML('beforeend', guest
-      ? `<div class="empty">The host has not put any teams in this draw yet</div>`
-      : `<div class="empty">No ${esc(draw.teamType)} ${esc(draw.category)} teams `
-        + `are registered yet</div>`);
+    card.insertAdjacentHTML('beforeend',
+      grouped
+        ? `<div class="empty">No team has come through yet - tick them through `
+          + `on the Groups tab</div>`
+        : guest
+          ? `<div class="empty">The host has not put any teams in this draw yet</div>`
+          : `<div class="empty">No ${esc(draw.teamType)} ${esc(draw.category)} teams `
+            + `are registered yet</div>`);
     return card;
   }
 
@@ -1200,8 +1212,9 @@ function teamPickCard(draw) {
     tick.checked = !!from || (draw.picked || []).includes(name);
 
     // a team that came through a group is managed on the Groups tab, not here,
-    // and a joined device changes nothing at all
-    tick.disabled = !!from || guest;
+    // a joined device changes nothing at all, and once there are groups this
+    // list is a record of who came through rather than something to edit
+    tick.disabled = !!from || guest || grouped;
     tick.title = from ? 'Came through ' + from : 'In the draw';
 
     tick.onchange = () => {
