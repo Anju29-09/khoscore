@@ -6,7 +6,7 @@
  *
  * Two rules shape everything here:
  *
- * The app must work with none of this. KhoTrack is used at grounds with no
+ * The app must work with none of this. KhoScore is used at grounds with no
  * signal, by people who will never sign in, and it has to start instantly and
  * score a match either way. So Firebase is fetched only when it is actually
  * wanted - on the sign-in tap, or at startup for somebody who has signed in

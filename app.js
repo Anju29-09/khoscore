@@ -1,4 +1,4 @@
-/* KhoTrack - web / desktop version.
+/* KhoScore - web / desktop version.
  *
  * Everything lives in this browser. Nothing is sent anywhere, there is no account and
  * no server: teams and matches are held in localStorage under the same key names the
@@ -2275,11 +2275,11 @@ $('#shLinkBtn').onclick = async () => {
   const draw = openDraw();
   if (!m || !m.host || !draw) return;
 
-  const text = 'Join ' + (draw.tournament || 'the tournament') + ' on KhoTrack.\n'
+  const text = 'Join ' + (draw.tournament || 'the tournament') + ' on KhoScore.\n'
     + 'Code: ' + m.code + '\n' + joinLink(m.code);
 
   if (navigator.share) {
-    try { await navigator.share({ title: 'KhoTrack', text }); return; }
+    try { await navigator.share({ title: 'KhoScore', text }); return; }
     catch (e) { if (e && e.name === 'AbortError') return; }
   }
 

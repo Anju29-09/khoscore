@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0F172A">
-<title>KhoTrack</title>
+<title>KhoScore</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=29">
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=29">
@@ -19,7 +19,7 @@
 <div id="splash">
   <div class="splash-main">
     <img src="icon-512.png?v=29" alt="" width="128" height="128">
-    <div class="splash-name">KhoTrack</div>
+    <div class="splash-name">KhoScore</div>
     <div class="splash-tag">Kho Kho Scoring</div>
   </div>
 
@@ -42,7 +42,7 @@
   </div>
 
   <p class="muted" id="installHint" style="display:none">
-    Tip: use your browser's <b>Install</b> button to keep KhoTrack on your desktop or home screen.
+    Tip: use your browser's <b>Install</b> button to keep KhoScore on your desktop or home screen.
   </p>
 </section>
 
@@ -566,7 +566,7 @@
 
 <dialog id="dlgUpdate">
   <h2>Update available</h2>
-  <p>A newer version of KhoTrack is ready.</p>
+  <p>A newer version of KhoScore is ready.</p>
   <div class="actions">
     <button class="grey" id="updLater">Later</button>
     <button class="green" id="updNow">Update now</button>
@@ -672,7 +672,7 @@
 
     const b = document.createElement('button');
     b.className = 'green';
-    b.textContent = '⬇ Install KhoTrack on this device';
+    b.textContent = '⬇ Install KhoScore on this device';
     b.onclick = async () => {
       hint.style.display = 'none';
       installPrompt.prompt();

@@ -1,4 +1,4 @@
-# KhoTrack
+# KhoScore
 
 Live Kho Kho match scoring, team registration and score sheets. Runs in any browser
 and installs as an app on a laptop, phone or tablet.
@@ -51,7 +51,7 @@ python -m http.server 8777
 
 then open <http://127.0.0.1:8777/index.html>.
 
-After changing any file, bump the version in `sw.js` (`khotrack-v28` → `v29`) or the
+After changing any file, bump the version in `sw.js` (`khoscore-v29` → `v30`) or the
 old cached copy keeps being served.
 
 | File | What it is |

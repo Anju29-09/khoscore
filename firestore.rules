@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// KhoTrack tournament rooms.
+// KhoScore tournament rooms.
 //
 // The shape of the thing: a room is one tournament. Its code is the key to the
 // door, its host is the only one who may change the draw, and anyone in the room

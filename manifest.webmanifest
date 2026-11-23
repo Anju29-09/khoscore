@@ -1,6 +1,6 @@
 {
-  "name": "KhoTrack - Kho Kho Scoring",
-  "short_name": "KhoTrack",
+  "name": "KhoScore - Kho Kho Scoring",
+  "short_name": "KhoScore",
   "description": "Live Kho Kho match scoring, team registration and score sheets. Works offline.",
   "start_url": "./index.html",
   "scope": "./",

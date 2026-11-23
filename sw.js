@@ -6,7 +6,7 @@
  * only sends SKIP_WAITING when the user accepts, so a match in progress is never
  * reloaded out from under the scorer.
  */
-const CACHE = 'khotrack-v29';
+const CACHE = 'khoscore-v29';
 
 const ASSETS = [
   './', './index.html', './styles.css?v=29',
