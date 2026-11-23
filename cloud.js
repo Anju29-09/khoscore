@@ -19,12 +19,12 @@
 const Cloud = (() => {
 
   const CONFIG = {
-    apiKey: 'AIzaSyDLpdPeyuQ3-M3nMZmwrXG33E2HV3M6CTk',
-    authDomain: 'khotrack.firebaseapp.com',
-    projectId: 'khotrack',
-    storageBucket: 'khotrack.firebasestorage.app',
-    messagingSenderId: '151817799261',
-    appId: '1:151817799261:web:96a16a76189b95e4b3efb4'
+    apiKey: 'AIzaSyDfvOEdLsvs_tVgaVl9_P_xvHF8XnWrWgQ',
+    authDomain: 'khoscore.firebaseapp.com',
+    projectId: 'khoscore',
+    storageBucket: 'khoscore.firebasestorage.app',
+    messagingSenderId: '211642702726',
+    appId: '1:211642702726:web:8e3ce15d790f6fd4fa6a07'
   };
 
   const SDK = 'https://www.gstatic.com/firebasejs/11.6.0/';
