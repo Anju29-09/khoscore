@@ -797,6 +797,11 @@ function openToss(t1, t2) {
   tossTeams = [t1, t2];
 
   $('#tossDate').value = todayIso();
+
+  // a fresh toss starts as a full match, whatever the last one was
+  const full = $('input[name=matchKind][value=full]');
+  if (full) full.checked = true;
+
   $('#tossTeams').textContent = t1.teamName + '   vs   ' + t2.teamName;
 
   $('#tossAttack').innerHTML = [t1, t2].map((t, i) =>
@@ -827,6 +832,7 @@ $('#toPlayersBtn').onclick = () => {
     attacking: tossTeams[atkIndex],
     defending: tossTeams[1 - atkIndex],
     matchDate: isoToDisplay(iso),
+    suddenDeath: ($('input[name=matchKind]:checked') || {}).value === 'sd',
     minutesPerHalf: minutes,
     attackPlayers: Number($('input[name=attackSize]:checked').value),
     wicketPoints: Number($('input[name=wicketPts]:checked').value),

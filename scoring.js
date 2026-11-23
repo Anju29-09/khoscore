@@ -43,9 +43,14 @@ const Scoring = (() => {
       bonusIntervalMs: setup.bonusIntervalSeconds * 1000,
 
       team1Score: 0, team2Score: 0,
-      currentPhase: 1,
+
+      // A match called as sudden death starts in it, at the same phase the tie
+      // breaker uses, so everything after this - the automatic lap, the wicket
+      // that settles it on time, the half titles on the score sheet - is the
+      // behaviour that was already there.
+      currentPhase: setup.suddenDeath ? 7 : 1,
       isTeam1Attacking: true,
-      isSuddenDeath: false,
+      isSuddenDeath: !!setup.suddenDeath,
       sdFirstWicketMs: 0,
       sdWinner: null,
 
