@@ -3,7 +3,7 @@
 Live Kho Kho match scoring, team registration and score sheets. Runs in any browser
 and installs as an app on a laptop, phone or tablet.
 
-**Open it:** https://anju29-09.github.io/khotrack/
+**Open it:** https://anju29-09.github.io/khoscore/
 
 ## Install it
 
