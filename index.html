@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0F172A">
 <title>KhoScore</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=30">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=30">
-<link rel="apple-touch-icon" href="icon-192.png?v=30">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=31">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=31">
+<link rel="apple-touch-icon" href="icon-192.png?v=31">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap">
-<link rel="stylesheet" href="styles.css?v=30">
+<link rel="stylesheet" href="styles.css?v=31">
 <script>
   // Sunlight is applied before the first paint, so it never flashes Night first
   try {
@@ -30,7 +30,7 @@
      bottom the way "from Meta" does. -->
 <div id="splash">
   <div class="splash-main">
-    <img src="icon-512.png?v=30" alt="" width="128" height="128">
+    <img src="icon-512.png?v=31" alt="" width="128" height="128">
     <div class="splash-name">KhoScore</div>
     <div class="splash-tag">Kho Kho Scoring</div>
   </div>
@@ -69,7 +69,7 @@
   <!-- an unfinished match comes first, whenever there is one -->
   <div class="livecard" id="homeLive" hidden>
     <div class="liveflag"><span class="dot"></span> <span id="hlFlag">Match in progress</span></div>
-    <div class="tally">
+    <div class="scoreline">
       <div class="side"><span class="crest" id="hlCode1"></span><span class="nm" id="hlName1"></span></div>
       <span class="num" id="hlScore1">0</span><span class="sep">&ndash;</span><span class="num" id="hlScore2">0</span>
       <div class="side right"><span class="crest" id="hlCode2"></span><span class="nm" id="hlName2"></span></div>
@@ -512,7 +512,7 @@
 
   <div class="card dthead">
     <span class="badge" id="dtBadge">Open</span>
-    <div class="tally">
+    <div class="scoreline">
       <div class="side"><span class="crest" id="dtCode1"></span><span class="nm" id="dt1Name"></span></div>
       <span class="num" id="dt1"></span><span class="sep">&ndash;</span><span class="num" id="dt2"></span>
       <div class="side right"><span class="crest" id="dtCode2"></span><span class="nm" id="dt2Name"></span></div>
@@ -709,13 +709,13 @@
 
 <div id="toast"></div>
 
-<script src="cloud.js?v=30"></script>
-<script src="share.js?v=30"></script>
-<script src="app.js?v=30"></script>
-<script src="scoring.js?v=30"></script>
-<script src="pdf.js?v=30"></script>
-<script src="detail.js?v=30"></script>
-<script src="room.js?v=30"></script>
+<script src="cloud.js?v=31"></script>
+<script src="share.js?v=31"></script>
+<script src="app.js?v=31"></script>
+<script src="scoring.js?v=31"></script>
+<script src="pdf.js?v=31"></script>
+<script src="detail.js?v=31"></script>
+<script src="room.js?v=31"></script>
 <script>
   // service worker gives the offline cache and makes the app installable
   /* ----------------------------------------------------------
@@ -817,7 +817,7 @@
 
   // so it is obvious at a glance whether the browser is running the newest files
   const stamp = document.getElementById('buildStamp');
-  if (stamp) stamp.textContent = ' — keys build v30';
+  if (stamp) stamp.textContent = ' — keys build v31';
 
   renderHome();
 

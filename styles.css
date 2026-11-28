@@ -376,17 +376,17 @@ label.opt:has(input:checked) {
   color: var(--warn);
 }
 
-.tally { display: flex; align-items: center; gap: 10px; }
-.tally .side { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
-.tally .side.right { flex-direction: row-reverse; text-align: right; }
-.tally .nm { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tally .num {
+.scoreline { display: flex; align-items: center; gap: 10px; }
+.scoreline .side { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+.scoreline .side.right { flex-direction: row-reverse; text-align: right; }
+.scoreline .nm { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scoreline .num {
   font-family: var(--display);
   font-size: 32px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-.tally .sep { color: var(--muted); font-size: 18px; }
+.scoreline .sep { color: var(--muted); font-size: 18px; }
 .statusline {
   display: flex;
   justify-content: space-between;
@@ -531,9 +531,9 @@ input.qual {
 /* a tie in the draw */
 .tie { padding: 12px 0; border-bottom: 1px solid var(--hair); }
 .tie:last-child { border-bottom: 0; }
-.tie .tally .num { font-size: 22px; }
+.tie .scoreline .num { font-size: 22px; }
 @media (max-width: 480px) { .tie .crest { display: none; } }
-.tie .tally .nm.won { color: var(--good); }
+.tie .scoreline .nm.won { color: var(--good); }
 .tie .statusline { margin-top: 8px; align-items: center; }
 
 /* ---------- segmented tabs inside a screen ---------- */
@@ -652,8 +652,8 @@ input.qual {
 }
 .timer.low { color: var(--bad); }
 
-.score { display: flex; gap: 10px; margin: 0; }
-.score > div {
+.schead .score { display: flex; gap: 10px; margin: 0; }
+.schead .score > div {
   flex: 1;
   min-width: 0;
   background: var(--wash2);
@@ -662,18 +662,18 @@ input.qual {
   text-align: center;
   border: 1px solid transparent;
 }
-.score > div.atk {
+.schead .score > div.atk {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-.score .who {
+.schead .score .who {
   font-size: 12px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.score .n {
+.schead .score .n {
   font-family: var(--display);
   font-size: 27px;
   font-weight: 700;
@@ -847,7 +847,7 @@ body[data-screen="scoring"] #toast { bottom: calc(160px + env(safe-area-inset-bo
 /* ---------- score sheet ---------- */
 
 .dthead { text-align: center; }
-.dthead .tally { margin: 14px 0 10px; }
+.dthead .scoreline { margin: 14px 0 10px; }
 .dthead #dtWinner { margin: 0 0 4px; }
 .dtactions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 .dtactions button { font-size: 13.5px; padding: 9px 6px; min-height: 42px; }
@@ -876,10 +876,31 @@ table.sheet tr.tally td {
 }
 table.sheet tr.tally.team td {
   color: var(--text);
-  font-weight: 600;
-  padding-top: 2px;
-  padding-left: 18px;
+  font-weight: 700;
+  padding-top: 12px;
+  border-bottom: 1px solid var(--line);
 }
+
+/* one player who took a wicket per row, the count out on the right */
+table.sheet tr.tally.player td {
+  color: var(--text);
+  font-weight: 500;
+  padding: 6px 6px 6px 18px;
+  border-bottom: 1px solid var(--hair);
+}
+table.sheet tr.tally td.count {
+  text-align: right;
+  padding-left: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+table.sheet tr.tally.team td.count {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+table.sheet tr.tally.player td.count { font-weight: 800; }
 
 /* editable scoresheet rows */
 table.sheet tr.editable { cursor: pointer; }
@@ -1048,6 +1069,7 @@ table.sheet tr.editable:hover td { background: var(--wash2); }
   .muted, .sub { color: #333; }
   table.sheet th { color: #000; border-bottom: 1px solid #000; }
   table.sheet tr.section td, table.sheet td.notout,
-  table.sheet tr.tally td, table.sheet tr.tally.team td { color: #000; }
+  table.sheet tr.tally td, table.sheet tr.tally.team td,
+  table.sheet tr.tally.player td { color: #000; }
   .badge { border: 1px solid #000; color: #000; }
 }

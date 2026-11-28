@@ -604,13 +604,23 @@ function renderDetail() {
 
   if (!rows.length) html += '<tr><td colspan="4" class="empty">No ball-by-ball data recorded</td></tr>';
 
-  // one tally for the whole match, once every inning is done
+  // One tally for the whole match, once every inning is done: each side, then
+  // every player who took a wicket on a row of their own, the count on the right.
   if (rows.length) {
     html += '<tr class="tally"><td colspan="4">Wickets Taken — Match Total</td></tr>';
 
     matchSummary(m, rows).forEach(t => {
-      html += `<tr class="tally team"><td colspan="4">${esc(t.name)} — `
-            + `${esc(pairsText(t.pairs))}</td></tr>`;
+      html += `<tr class="tally team"><td colspan="3">${esc(t.name)}</td>`
+            + `<td class="count">Wickets</td></tr>`;
+
+      if (!t.pairs.length) {
+        html += '<tr class="tally player"><td colspan="4">None</td></tr>';
+      }
+
+      t.pairs.forEach(p => {
+        html += `<tr class="tally player"><td colspan="3">${esc(numName(p.jersey, p.player))}</td>`
+              + `<td class="count">${p.count}</td></tr>`;
+      });
     });
   }
 
@@ -845,7 +855,9 @@ function sheetText(m) {
   s += `\n---- Wickets Taken — Match Total ----\n`;
 
   matchSummary(m, sheetRows(m)).forEach(t => {
-    s += `${t.name} — ${pairsText(t.pairs)}\n`;
+    s += `${t.name}\n`;
+    if (!t.pairs.length) s += '   None\n';
+    t.pairs.forEach(p => { s += `   ${numName(p.jersey, p.player)} - ${p.count}\n`; });
   });
 
   return s;
@@ -933,9 +945,18 @@ function buildSheetPdf(m) {
   if (!totals.length) {
     d.text('None', { size: 9 });
   } else {
+    // the side, then one player per line with the count in its own column
     totals.forEach(t => {
-      d.text(t.name, { size: 9, bold: true, gapAfter: 0 });
-      d.text(pairsText(t.pairs), { size: 9, x: M_LEFT + 12, gapAfter: 4 });
+      d.row([[t.name, M_LEFT, 280], ['Wickets', M_LEFT + 300, 80]], { size: 9, bold: true });
+
+      if (!t.pairs.length) d.row([['None', M_LEFT + 12, 280]], { size: 9 });
+
+      t.pairs.forEach(p => {
+        d.row([[numName(p.jersey, p.player), M_LEFT + 12, 280], [String(p.count), M_LEFT + 300, 80]],
+              { size: 9 });
+      });
+
+      d.gap(6);
     });
   }
 

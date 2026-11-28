@@ -1828,13 +1828,13 @@ function roundCard(draw, ties, index, teamsOverride, numbers) {
         ? `<span class="chip done">${esc(won)} through</span>`
         : '<span class="chip next">To play</span>';
 
-    row.innerHTML = `<div class="tally">${side(tie.a, false)}`
+    row.innerHTML = `<div class="scoreline">${side(tie.a, false)}`
       + (tie.b ? middle + side(tie.b, true) : '') + `</div>`
       + `<div class="statusline">${status}<span class="spacer"></span></div>`;
 
     // a tie that has been played opens its score sheet
     if (m) {
-      const t = row.querySelector('.tally');
+      const t = row.querySelector('.scoreline');
       t.style.cursor = 'pointer';
       t.title = 'Open the score sheet';
       t.onclick = () => showDetail(m, Matches.all().findIndex(x => x.id === m.id));
