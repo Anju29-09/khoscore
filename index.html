@@ -772,8 +772,10 @@
           });
         });
 
-        reg.update();                                   // check on every open
-        setInterval(() => reg.update(), 60 * 60 * 1000); // and hourly if left open
+        // Check on every open, and hourly if left open. A check that cannot run -
+        // no signal, or a first install still in progress - just waits for the next.
+        reg.update().catch(() => {});
+        setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
 
       }).catch(e => console.warn('sw', e));
     });
@@ -800,7 +802,7 @@
 
     const b = document.createElement('button');
     b.className = 'green';
-    b.textContent = '⬇ Install KhoScore on this device';
+    b.textContent = 'Install KhoScore on this device';
     b.onclick = async () => {
       hint.style.display = 'none';
       installPrompt.prompt();
