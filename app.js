@@ -281,24 +281,66 @@ function markTab(name) {
   });
 }
 
-const history_ = [];
+/* ------------------------------------------------------------
+   Back.
+
+   The browser's history is kept exactly as deep as the app is. Home sits on
+   the first entry, so a back press on home leaves the app straight away. The
+   four other tabs sit one above home, however they were reached - from the tab
+   bar, from a row on Today, or after saving a team. Every other screen sits
+   one above whatever opened it, so back from it goes there.
+
+   Before this, every screen ever opened stayed in the history, and back from
+   home walked through all of them before the app would close.
+   ------------------------------------------------------------ */
+
+const ROOTS = ['teams', 'draws', 'sheets', 'account'];
+
+const history_ = [];          // the screens beneath this one, home first
 let current = 'home';
 
+let browserDepth = 0;         // how far above its first entry the browser is
+let settling = false;         // a step back the browser has not finished yet
+
+/**
+ * Brings the browser's history into line with the app's: steps back when the
+ * app is shallower, adds entries when it is deeper. A step back lands later,
+ * on popstate, which calls this again to finish the job.
+ */
+function reconcile() {
+  if (settling) return;
+
+  const want = history_.length;
+
+  if (want < browserDepth) {
+    settling = true;
+    history.go(want - browserDepth);
+    return;
+  }
+
+  while (browserDepth < want) {
+    browserDepth++;
+    history.pushState({ depth: browserDepth }, '');
+  }
+}
+
 function go(name, push = true, reset = false) {
-  if (reset) {
-    // leaving for good: the screen behind must not be reachable again, or a back
-    // press would land on a match that is no longer being scored
+  if (reset || (push && name === 'home')) {
+    // home is the bottom of everything; nothing stays beneath it
     history_.length = 0;
-    history.replaceState({ screen: name }, '');
+
+  } else if (push && ROOTS.includes(name)) {
+    // a tab always sits directly on home
+    history_.length = 0;
+    history_.push('home');
 
   } else if (push && name !== current) {
     history_.push(current);
-
-    // mirror the move into the browser's own history, so a phone's back button
-    // or gesture steps back through the app instead of leaving it
-    history.pushState({ screen: name }, '');
   }
+
   current = name;
+  reconcile();
+
   $$('.screen').forEach(s => s.classList.remove('active'));
   $('#s-' + name).classList.add('active');
   markTab(name);
@@ -312,25 +354,50 @@ function back() {
   if (history_.length) history.back();
 }
 
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', e => {
+  const depth = (e.state && typeof e.state.depth === 'number') ? e.state.depth : 0;
+
+  // a step back the app asked for has landed: finish lining up
+  if (settling) {
+    settling = false;
+    browserDepth = depth;
+    reconcile();
+    return;
+  }
+
+  browserDepth = depth;
 
   // a live match must not be dropped by an accidental back press, so put the
   // entry the browser just removed back and let confirmExit decide
   if (current === 'scoring' && Scoring.isLive()) {
-    history.pushState({ screen: 'scoring' }, '');
+    reconcile();
     Scoring.confirmExit();
     return;
   }
 
-  let prev = history_.pop();
+  // a step forward (only possible on a laptop) has no screen to rebuild, so the
+  // app stays where it is and the browser is put back
+  if (depth >= history_.length) {
+    reconcile();
+    return;
+  }
+
+  // back to the screen that sits at that depth - one step, or several at once
+  // from a laptop's long-press history menu
+  let prev = history_[depth];
+  history_.length = depth;
 
   // never step back into the scoring screen once the match behind it has gone
-  while (prev === 'scoring' && !Scoring.isLive()) prev = history_.pop();
+  while (prev === 'scoring' && !Scoring.isLive()) prev = history_.pop() || 'home';
 
-  // nothing left to unwind means we are on the home screen; let the back press
-  // leave the app as it normally would
-  if (prev) go(prev, false);
+  go(prev, false);
 });
+
+/* A reload - the update prompt reloads the app - keeps the browser's entries
+   but starts the app on home, so the browser is stepped back to the first one
+   here. Otherwise the leftover entries would be back presses that do nothing. */
+browserDepth = (history.state && typeof history.state.depth === 'number') ? history.state.depth : 0;
+reconcile();
 
 const SCREEN_ENTER = {
   home: renderHome,
@@ -778,10 +845,8 @@ $('#saveTeamBtn').onclick = () => {
     toast('Team Updated (' + players.length + ' players)');
     regClear();
 
-    // back to the list with the form and the detail screen dropped from the way
-    // back, so a back press goes home rather than reopening the edit form
-    history_.length = 0;
-    current = 'home';
+    // back to the list; Teams is a tab, so it sits straight on home and the form
+    // and the team's own screen are gone from the way back
     go('teams');
     return;
   }
@@ -3068,7 +3133,7 @@ function joinFromLink() {
   const wanted = new URLSearchParams(location.search).get('join');
   if (!wanted) return;
 
-  history.replaceState({}, '', location.pathname);
+  history.replaceState({ depth: browserDepth }, '', location.pathname);
 
   toast('Joining…', 8000);
 

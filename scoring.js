@@ -994,6 +994,9 @@ const Scoring = (() => {
 
     M = null;
     // the match was just appended, so it is the last entry in storage
+    // The finished sheet sits straight on top of home. Back from it goes home,
+    // not back through the toss and subs screens of a match that is over.
+    go('home', false, true);
     showDetail(match, Matches.all().length - 1);
   }
 
