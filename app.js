@@ -142,12 +142,36 @@ const $ = sel => document.querySelector(sel);
 const $$ = sel => Array.from(document.querySelectorAll(sel));
 
 let toastTimer = null;
-function toast(msg, ms = 2400) {
+
+/**
+ * A short message at the bottom of the screen. With an action it becomes a
+ * snackbar - "Wicket recorded  Undo" - and stays tappable while it shows.
+ */
+function toast(msg, ms = 2400, action = null) {
   const el = $('#toast');
-  el.textContent = msg;
+  el.textContent = '';
+
+  const text = document.createElement('span');
+  text.textContent = msg;
+  el.appendChild(text);
+
+  el.classList.toggle('actionable', !!action);
+
+  if (action) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = action.label;
+    b.onclick = () => {
+      el.classList.remove('show', 'actionable');
+      clearTimeout(toastTimer);
+      action.run();
+    };
+    el.appendChild(b);
+  }
+
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  toastTimer = setTimeout(() => el.classList.remove('show', 'actionable'), ms);
 }
 
 /** Promise-based confirm. Resolves 'yes' | 'no' | 'alt'. */
@@ -234,6 +258,29 @@ function esc(s) {
    NAVIGATION
    ============================================================ */
 
+/* The tab bar belongs to browsing. Registering a team, starting a match and
+   scoring one are flows with a beginning and an end, so it steps aside for
+   them. A screen under a tab lights that tab: a match opened from anywhere is
+   still a score sheet. */
+const TAB_OF = {
+  home: 'home', account: 'account',
+  teams: 'teams', teamdetail: 'teams',
+  draws: 'draws', drawdetail: 'draws',
+  sheets: 'sheets', detail: 'sheets'
+};
+
+function markTab(name) {
+  const tab = TAB_OF[name] || null;
+
+  document.body.dataset.screen = name;
+  document.body.classList.toggle('no-tabs', !tab);
+
+  $$('#tabbar [data-tab]').forEach(b => {
+    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+}
+
 const history_ = [];
 let current = 'home';
 
@@ -254,6 +301,7 @@ function go(name, push = true, reset = false) {
   current = name;
   $$('.screen').forEach(s => s.classList.remove('active'));
   $('#s-' + name).classList.add('active');
+  markTab(name);
   window.scrollTo(0, 0);
   if (SCREEN_ENTER[name]) SCREEN_ENTER[name]();
 }
@@ -293,6 +341,16 @@ const SCREEN_ENTER = {
 };
 
 document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('[data-tab]');
+  if (tabBtn) {
+    // the tab you are already on takes you back to its top
+    if (tabBtn.dataset.tab === current) window.scrollTo({ top: 0, behavior: 'smooth' });
+    else go(tabBtn.dataset.tab);
+    return;
+  }
+
+  if (e.target.closest('.sunbtn')) { toggleSunlight(); return; }
+
   const goBtn = e.target.closest('[data-go]');
   if (goBtn) {
     // reaching registration from the menu is always a new team, never the one
@@ -304,21 +362,229 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-back]')) back();
 });
 
+markTab(current);
+
+/* ---------------- Sunlight ----------------
+   A high-contrast palette for scoring outdoors at midday. Remembered on this
+   device only, and applied in the page head before anything paints. */
+
+function setSunlight(on) {
+  if (on) document.documentElement.dataset.sun = 'on';
+  else delete document.documentElement.dataset.sun;
+
+  try { localStorage.setItem('sunlight', on ? '1' : '0'); } catch (e) {}
+
+  const meta = document.querySelector('meta[name=theme-color]');
+  if (meta) meta.content = on ? '#F4F7FB' : '#0F172A';
+}
+
+function toggleSunlight() {
+  const on = document.documentElement.dataset.sun !== 'on';
+  setSunlight(on);
+  toast(on ? 'Sunlight on - high contrast for outdoors' : 'Back to the night palette');
+}
+
 /* ============================================================
    HOME
    ============================================================ */
 
+/** The three letters a team is known by at a glance: Satara is SAT. */
+function teamCode(name) {
+  const letters = String(name || '').replace(/[^A-Za-z]/g, '');
+  return (letters.slice(0, 3) || '?').toUpperCase();
+}
+
+/** "2nd Inning · 1st Half" for a phase number. */
+function phaseName(p) {
+  return ({
+    1: '1st Inning · 1st Half', 2: '1st Inning · 2nd Half',
+    3: '2nd Inning · 1st Half', 4: '2nd Inning · 2nd Half',
+    5: '3rd Inning · 1st Half', 6: '3rd Inning · 2nd Half',
+    7: 'Sudden Death · 1st Half', 8: 'Sudden Death · 2nd Half'
+  })[p] || '';
+}
+
+/** Today in the same form dateKey gives any stored date. */
+function todayKey() {
+  return dateKey(isoToDisplay(todayIso()));
+}
+
+/** A day key as a number that sorts, or NaN for a date that cannot be read. */
+function keyTime(key) {
+  const p = String(key).split('-').map(n => parseInt(n, 10));
+  return p.length === 3 && p.every(n => !isNaN(n)) ? Date.UTC(p[2], p[1] - 1, p[0]) : NaN;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "28 Nov" for a day key. */
+function dayLabel(key) {
+  const p = String(key).split('-').map(n => parseInt(n, 10));
+  return p.length === 3 && !isNaN(p[0]) && p[1] >= 1 && p[1] <= 12
+    ? p[0] + ' ' + MONTHS[p[1] - 1]
+    : String(key);
+}
+
+/** True for a score sheet that was settled in sudden death. */
+function wentToSuddenDeath(m) {
+  return (m.halfTitles || []).some(h => String(h).startsWith('Sudden Death'));
+}
+
+/**
+ * The line that says whether this phone is sharing, and whether it can.
+ * Everything is saved on the phone either way; the line is there so that a bad
+ * signal at a ground is something you are told, not something you find out.
+ */
+function renderSyncStrip(sel) {
+  const strip = $(sel);
+  if (!strip) return;
+
+  const rooms = (typeof Room === 'undefined') ? []
+    : Draws.all().map(d => Room.forDraw(d.id)).filter(Boolean);
+
+  const offline = navigator.onLine === false;
+
+  if (!rooms.length && !offline) { strip.hidden = true; return; }
+
+  strip.hidden = false;
+  strip.classList.toggle('off', offline);
+
+  if (offline) {
+    strip.innerHTML = '<span class="dot"></span> No signal &mdash; everything is saved on this phone'
+      + (rooms.length ? '<span class="push">sheets send when you are back</span>' : '');
+    return;
+  }
+
+  const hosting = rooms.filter(r => r.host).length;
+  const joined = rooms.length - hosting;
+  const parts = [];
+  if (hosting) parts.push('Hosting ' + hosting + (hosting === 1 ? ' tournament' : ' tournaments'));
+  if (joined) parts.push('Joined ' + joined);
+
+  strip.innerHTML = '<svg width="16" height="16" aria-hidden="true"><use href="#i-cloud"/></svg> '
+    + esc(parts.join(' · '));
+}
+
+window.addEventListener('online', () => { if (current === 'home') renderHome(); });
+window.addEventListener('offline', () => { if (current === 'home') renderHome(); });
+
+/** A tappable row: name, a line under it, and something on the right. */
+function infoRow(name, meta, right, onTap) {
+  const row = document.createElement('div');
+  row.className = 'listrow' + (onTap ? ' pick' : '');
+  row.innerHTML = `<div class="grow"><div class="name">${name}</div>`
+    + (meta ? `<div class="meta">${meta}</div>` : '') + `</div>` + (right || '');
+  if (onTap) row.onclick = onTap;
+  return row;
+}
+
+/**
+ * Today.
+ *
+ * The home screen says what is happening rather than offering six doors: an
+ * unfinished match first, then today's matches with their results and the ties
+ * still to play, then the way into a new one.
+ */
 function renderHome() {
+  renderSyncStrip('#syncStrip');
+
+  // ---- the unfinished match ----
   const draft = DB.read('liveMatchDraft', null);
-  const btn = $('#resumeBtn');
+  const live = $('#homeLive');
 
   if (draft && draft.team1 && draft.team2) {
-    btn.style.display = '';
-    btn.textContent = '⏱ Resume  ' + draft.team1.teamName + ' ' + draft.team1Score
-                    + ' - ' + draft.team2Score + ' ' + draft.team2.teamName;
+    live.hidden = false;
+    $('#hlName1').textContent = draft.team1.teamName;
+    $('#hlName2').textContent = draft.team2.teamName;
+    $('#hlCode1').textContent = teamCode(draft.team1.teamName);
+    $('#hlCode2').textContent = teamCode(draft.team2.teamName);
+    $('#hlScore1').textContent = draft.team1Score || 0;
+    $('#hlScore2').textContent = draft.team2Score || 0;
+    $('#hlPhase').textContent = phaseName(draft.currentPhase);
+    $('#hlTime').textContent = typeof draft.timeLeft === 'number'
+      ? fmtTime(draft.timeLeft) + ' left' : '';
   } else {
-    btn.style.display = 'none';
+    live.hidden = true;
   }
+
+  // ---- today ----
+  const today = todayKey();
+  const all = Matches.all();
+  const draws = Draws.all();
+
+  const played = [];
+  all.forEach((m, i) => { if (dateKey(m.date) === today) played.push({ m, i }); });
+
+  const drawsToday = draws.filter(d => drawDates(d).map(dateKey).includes(today));
+
+  const toPlay = [];
+  drawsToday.forEach(d => (d.bracket || []).forEach(tie => {
+    if (tie.b && !tieWinner(d, tie)) toPlay.push({ draw: d, tie });
+  }));
+
+  const box = $('#homeToday');
+  box.innerHTML = `<p class="eyebrow">Today &middot; ${esc(dayLabel(today))}</p>`;
+
+  const card = document.createElement('div');
+  card.className = 'card tight';
+
+  toPlay.forEach(({ draw, tie }) => {
+    card.appendChild(infoRow(
+      `${esc(tie.a)} v ${esc(tie.b)}`,
+      esc(draw.tournament || 'Tournament'),
+      '<span class="chip next">To play</span>',
+      () => { showDraw(draw); showDrawTab('draw'); }));
+  });
+
+  played.slice().reverse().forEach(({ m, i }) => {
+    const sd = wentToSuddenDeath(m);
+    card.appendChild(infoRow(
+      `${esc(m.team1Name)} v ${esc(m.team2Name)}`,
+      `${esc((m.teamType || 'Men') + ' ' + (m.category || 'Open'))} &middot; `
+        + (isDraw(m) ? 'Draw' : 'won by ' + esc(m.winner)) + (sd ? ' &middot; sudden death' : ''),
+      `<span class="score">${m.team1Score}&ndash;${m.team2Score}</span>`,
+      () => showDetail(m, i)));
+  });
+
+  if (!card.children.length) {
+    card.innerHTML = '<div class="empty">Nothing scored today yet</div>';
+  }
+  box.appendChild(card);
+
+  // ---- today's tournaments ----
+  const tBox = $('#homeTournaments');
+  tBox.innerHTML = '';
+  drawsToday.forEach(d => {
+    const b = document.createElement('button');
+    b.className = 'grey big';
+    b.textContent = 'Open ' + (d.tournament || 'tournament');
+    b.onclick = () => showDraw(d);
+    tBox.appendChild(b);
+  });
+
+  // ---- what is on this phone ----
+  const teams = Teams.all();
+  const sides = [...new Set(teams.map(t => (t.teamType || 'Men') + ' ' + (t.category || 'Open')))];
+
+  const counts = $('#homeCounts');
+  counts.innerHTML = '';
+
+  counts.appendChild(teams.length
+    ? infoRow(`${teams.length} ${teams.length === 1 ? 'team' : 'teams'} registered`,
+        esc(sides.slice(0, 3).join(', ') + (sides.length > 3 ? ' and more' : '')),
+        '<span class="chip">Teams</span>', () => go('teams'))
+    : infoRow('Register your first team', 'Squads are typed once and used in every match',
+        '<span class="chip next">Register</span>', () => go('register')));
+
+  counts.appendChild(infoRow(
+    `${all.length} score ${all.length === 1 ? 'sheet' : 'sheets'}`,
+    played.length ? `${played.length} today` : 'none today',
+    '<span class="chip">Sheets</span>', () => go('sheets')));
+
+  counts.appendChild(infoRow(
+    `${draws.length} ${draws.length === 1 ? 'tournament' : 'tournaments'}`,
+    drawsToday.length ? `${drawsToday.length} on today` : 'none on today',
+    '<span class="chip">Draws</span>', () => go('draws')));
 }
 
 $('#resumeBtn').onclick = () => {
@@ -549,7 +815,7 @@ function renderTeams() {
 
   let shown = 0, menShown = 0;
 
-  [['Men', '👨 Men Teams', 'var(--yellow)'], ['Women', '👩 Women Teams', 'var(--pink)']]
+  [['Men', 'Men', ''], ['Women', 'Women', '']]
     .forEach(([type, title, colour]) => {
 
       const sideTeams = all.filter(t => (t.teamType || 'Men') === type);
@@ -618,7 +884,28 @@ function renderTeams() {
       : `${shown} of ${all.length} teams   •   ${menShown} men, ${shown - menShown} women`;
   }
 
-  if (!all.length) box.innerHTML = '<div class="card empty">No teams registered yet</div>';
+  if (!all.length) {
+    box.innerHTML = '<div class="card empty">No teams registered yet. '
+      + 'Tap <b>+</b> at the top to register one.</div>';
+  }
+}
+
+/** Whether a team is playing in any tournament of its own side and age group. */
+function teamInAnyDraw(team) {
+  return Draws.all().some(d =>
+    (d.teamType || 'Men') === (team.teamType || 'Men')
+    && (d.category || 'Open') === (team.category || 'Open')
+    && teamsInDraw(d).some(t => sameName(t.teamName, team.teamName)));
+}
+
+/** A small trash button for the end of a row. */
+function trashButton(label) {
+  const b = document.createElement('button');
+  b.className = 'iconbtn danger';
+  b.title = label;
+  b.setAttribute('aria-label', label);
+  b.innerHTML = '<svg><use href="#i-trash"/></svg>';
+  return b;
 }
 
 function teamRow(team) {
@@ -626,16 +913,16 @@ function teamRow(team) {
   row.className = 'listrow';
 
   row.innerHTML = `
+    <span class="crest">${esc(teamCode(team.teamName))}</span>
     <div class="grow pick">
       <div class="name">${esc(team.teamName)}</div>
       <div class="meta">${team.players.length} players • Coach: ${esc(team.coachName)}</div>
-    </div>`;
+    </div>`
+    + (teamInAnyDraw(team) ? '<span class="chip done">In draw</span>' : '');
 
   row.querySelector('.grow').onclick = () => showTeamDetail(team);
 
-  const del = document.createElement('button');
-  del.className = 'red';
-  del.textContent = '🗑';
+  const del = trashButton('Delete ' + team.teamName);
   del.onclick = async () => {
     if (await ask('Delete Team',
       `Delete ${team.teamName} (${team.teamType} ${team.category})?`,
@@ -658,7 +945,8 @@ function showTeamDetail(team) {
   $('#tdMeta').textContent = `Coach: ${team.coachName}  •  ${team.teamType} ${team.category}`
                            + `  •  ${team.players.length} players`;
   $('#tdPlayers').innerHTML = team.players
-    .map((p, i) => `<div class="listrow"><div class="grow">🔹 ${i + 1}. ${esc(p)}</div></div>`)
+    .map((p, i) => `<div class="listrow"><span class="rank">${i + 1}</span>`
+      + `<div class="grow">${esc(p)}</div></div>`)
     .join('');
 
   $('#tdEditBtn').onclick = () => editTeam(team);
@@ -698,8 +986,8 @@ function editTeam(team) {
 
 /** Puts the registration screen into add or edit wording. */
 function setRegMode() {
-  $('#regTitle').textContent = editingTeam ? '✏️ Edit Team' : '🏃 Team Registration';
-  $('#saveTeamBtn').textContent = editingTeam ? 'UPDATE TEAM' : 'SAVE TEAM';
+  $('#regTitle').textContent = editingTeam ? 'Edit team' : 'Register a team';
+  $('#saveTeamBtn').textContent = editingTeam ? 'Update team' : 'Save team';
 
   // importing a WhatsApp reply over a team being edited would be confusing
   $('#regInviteRow').style.display = editingTeam ? 'none' : '';
@@ -974,21 +1262,27 @@ function renderDraws() {
   const all = Draws.all();
   const box = $('#drawList');
 
-  $('#drawTotal').textContent = `Total Draws : ${all.length}`;
+  $('#drawTotal').textContent = `${all.length} ${all.length === 1 ? 'tournament' : 'tournaments'}`;
 
   box.innerHTML = '';
 
   if (!all.length) {
-    box.innerHTML = '<div class="card empty">No draws yet</div>';
+    // nothing to list, so the form is the whole screen
+    $('#newDrawCard').hidden = false;
+    box.innerHTML = '<div class="card empty">No tournaments yet</div>';
     return;
   }
 
   const card = document.createElement('div');
-  card.className = 'card';
+  card.className = 'card tight';
+
+  const today = todayKey();
 
   // newest first, the same way the score sheets are listed
   for (let i = all.length - 1; i >= 0; i--) {
     const d = all[i];
+    const member = (typeof Room === 'undefined') ? null : Room.forDraw(d.id);
+    const onToday = drawDates(d).map(dateKey).includes(today);
 
     const row = document.createElement('div');
     row.className = 'listrow';
@@ -996,13 +1290,13 @@ function renderDraws() {
       <div class="grow pick">
         <div class="name">${esc(d.tournament)}</div>
         <div class="meta">${esc(drawDates(d).join(',  ') || 'No Date')} • ${esc(d.teamType)} ${esc(d.category)}</div>
-      </div>`;
+      </div>`
+      + (onToday ? '<span class="chip live">Today</span>' : '')
+      + (member ? `<span class="chip next">${member.host ? 'Hosting' : 'Joined'}</span>` : '');
 
     row.querySelector('.grow').onclick = () => showDraw(d);
 
-    const del = document.createElement('button');
-    del.className = 'red';
-    del.textContent = '🗑';
+    const del = trashButton('Delete ' + (d.tournament || 'tournament'));
     del.onclick = async () => {
       if (await ask('Delete Draw', `Delete ${d.tournament}?`, { yes: 'Delete' }) !== 'yes') return;
       Draws.save(Draws.all().filter(x => x.id !== d.id));
@@ -1043,8 +1337,15 @@ $('#saveDrawBtn').onclick = () => {
   $('#drawName').value = '';
   $('#drawDate').value = '';
 
-  toast('Draw Saved');
+  $('#newDrawCard').hidden = true;
+  toast('Tournament saved');
   renderDraws();
+};
+
+$('#newDrawToggle').onclick = () => {
+  const card = $('#newDrawCard');
+  card.hidden = !card.hidden;
+  if (!card.hidden) $('#drawName').focus();
 };
 
 /* ---------------- one draw: groups and the bracket ---------------- */
@@ -1067,20 +1368,24 @@ function showDraw(draw) {
   go('drawdetail');
 }
 
-function showDrawTab(which) {
-  const groups = which === 'groups';
+/** The tabs on a tournament: which button, which panel, and what fills it. */
+const DD_TABS = {
+  groups:  ['#ddGroupsTab', '#ddGroupsView', () => renderGroups()],
+  draw:    ['#ddDrawTab', '#ddDrawView', () => renderDrawTab()],
+  days:    ['#ddDaysTab', '#ddDaysView', () => renderDays()],
+  leaders: ['#ddLeadersTab', '#ddLeadersView', () => renderLeaders()],
+  share:   ['#ddShareTab', '#ddShareView', () => renderShare()]
+};
 
+function showDrawTab(which) {
   ddTab = which;
 
-  $('#ddGroupsView').style.display = groups ? '' : 'none';
-  $('#ddDrawView').style.display = groups ? 'none' : '';
-  $('#ddShareView').style.display = 'none';
+  Object.entries(DD_TABS).forEach(([key, [tab, view]]) => {
+    $(view).style.display = key === which ? '' : 'none';
+    $(tab).className = key === which ? 'green' : 'grey';
+  });
 
-  $('#ddGroupsTab').className = groups ? 'green' : 'grey';
-  $('#ddDrawTab').className = groups ? 'grey' : 'green';
-  $('#ddShareTab').className = 'grey';
-
-  if (groups) renderGroups(); else renderDrawTab();
+  DD_TABS[which][2]();
 }
 
 /** The teams ticked in each group, in group order. */
@@ -1247,7 +1552,7 @@ function teamPickCard(draw) {
     row.appendChild(tick);
 
     row.insertAdjacentHTML('beforeend',
-      `<div class="grow">🔹 ${esc(name)}`
+      `<div class="grow">${esc(name)}`
       + (from ? ` <span class="muted">${esc(from)}</span>` : '')
       + `</div>`
       + (wins ? `<span class="wins" title="Matches won">${wins}</span>` : ''));
@@ -1480,7 +1785,7 @@ function renderDrawTab() {
     if (champion) {
       const card = document.createElement('div');
       card.className = 'card';
-      card.innerHTML = `<h2>🏆 Winner</h2>`
+      card.innerHTML = `<h2>Champion</h2>`
         + `<div class="listrow"><div class="grow">`
         + `<div class="name">${numbered(numbers, champion)}</div></div></div>`;
       box.appendChild(card);
@@ -1495,30 +1800,53 @@ function roundCard(draw, ties, index, teamsOverride, numbers) {
 
   ties.forEach((tie, ti) => {
     const won = tieWinner(draw, tie);
+    const m = tie.b ? matchBetween(draw, tie.a, tie.b) : null;
 
     const row = document.createElement('div');
-    row.className = 'listrow';
+    row.className = 'tie';
 
-    const label = tie.b
-      ? `<span class="${won && sameName(won, tie.a) ? 'through' : ''}">`
-        + `${numbered(numbers, tie.a)}</span>`
-        + ` <span class="muted">vs</span> `
-        + `<span class="${won && sameName(won, tie.b) ? 'through' : ''}">`
-        + `${numbered(numbers, tie.b)}</span>`
-      : `<span class="through">${numbered(numbers, tie.a)}</span>`;
+    const side = (name, right) => {
+      const isWinner = won && sameName(won, name);
+      return `<div class="side${right ? ' right' : ''}">`
+        + `<span class="crest">${esc(teamCode(name))}</span>`
+        + `<span class="nm${isWinner ? ' won' : ''}">${numbered(numbers, name)}</span></div>`;
+    };
 
-    const under = tie.b
-      ? (won ? `${numbered(numbers, won)} goes through` : 'Waiting for the result')
-      : 'Bye';
+    let middle = '<span class="sep">v</span>';
 
-    row.innerHTML = `<div class="grow"><div class="name">${label}</div>`
-      + `<div class="meta">${under}</div></div>`;
+    if (m) {
+      // the score in the tie's own order, whichever side the sheet put first
+      const aFirst = sameName(m.team1Name, tie.a);
+      middle = `<span class="num">${aFirst ? m.team1Score : m.team2Score}</span>`
+        + `<span class="sep">&ndash;</span>`
+        + `<span class="num">${aFirst ? m.team2Score : m.team1Score}</span>`;
+    }
+
+    const status = !tie.b
+      ? '<span class="chip">Bye</span>'
+      : won
+        ? `<span class="chip done">${esc(won)} through</span>`
+        : '<span class="chip next">To play</span>';
+
+    row.innerHTML = `<div class="tally">${side(tie.a, false)}`
+      + (tie.b ? middle + side(tie.b, true) : '') + `</div>`
+      + `<div class="statusline">${status}<span class="spacer"></span></div>`;
+
+    // a tie that has been played opens its score sheet
+    if (m) {
+      const t = row.querySelector('.tally');
+      t.style.cursor = 'pointer';
+      t.title = 'Open the score sheet';
+      t.onclick = () => showDetail(m, Matches.all().findIndex(x => x.id === m.id));
+    }
 
     // only the round the referee made by hand can be unpicked
     if (index === 0) {
       const undo = document.createElement('button');
-      undo.className = 'red';
-      undo.textContent = '✕';
+      undo.className = 'iconbtn danger';
+      undo.title = 'Take this tie out';
+      undo.setAttribute('aria-label', 'Take this tie out');
+      undo.innerHTML = '<svg><use href="#i-x"/></svg>';
       undo.onclick = () => {
         const d = openDraw();
         if (!d) return;
@@ -1526,7 +1854,7 @@ function roundCard(draw, ties, index, teamsOverride, numbers) {
         d.bracket.splice(ti, 1);
         if (saveOpenDraw(d)) renderDrawTab();
       };
-      row.appendChild(undo);
+      row.querySelector('.statusline').appendChild(undo);
     }
 
     card.appendChild(row);
@@ -1566,7 +1894,7 @@ function pairingCard(draw, waiting) {
     };
 
     const bye = document.createElement('button');
-    bye.className = 'amber';
+    bye.className = 'grey';
     bye.textContent = 'Bye';
     bye.onclick = () => {
       const d = openDraw();
@@ -1588,6 +1916,189 @@ function pairingCard(draw, waiting) {
 
 $('#ddGroupsTab').onclick = () => showDrawTab('groups');
 $('#ddDrawTab').onclick = () => showDrawTab('draw');
+$('#ddDaysTab').onclick = () => showDrawTab('days');
+$('#ddLeadersTab').onclick = () => showDrawTab('leaders');
+
+/* ---------------- the tournament, day by day ---------------- */
+
+/**
+ * Each of the tournament's days with the matches scored on it, and the ties
+ * still waiting for a result. The app never schedules a tie to a day, so they
+ * are shown once, on today if the tournament is on today, otherwise on its next
+ * day - nothing is invented about when they will be played.
+ */
+function renderDays() {
+  const draw = openDraw();
+  const box = $('#ddDaysView');
+
+  box.innerHTML = '';
+  if (!draw) return;
+
+  const keys = drawDates(draw).map(dateKey);
+  const today = todayKey();
+  const now = keyTime(today);
+
+  const sheets = [];
+  Matches.all().forEach((m, i) => {
+    if ((m.teamType || 'Men') !== draw.teamType || (m.category || 'Open') !== draw.category) return;
+    const k = dateKey(m.date);
+    if (keys.includes(k)) sheets.push({ m, i, k });
+  });
+
+  const toPlay = (draw.bracket || []).filter(tie => tie.b && !tieWinner(draw, tie));
+
+  const ordered = keys.slice().sort((a, b) => (keyTime(a) || 0) - (keyTime(b) || 0));
+
+  const playDay = ordered.includes(today) ? today
+    : ordered.find(k => keyTime(k) > now) || null;
+
+  if (!ordered.length) {
+    box.innerHTML = '<div class="card empty">This tournament has no dates</div>';
+    return;
+  }
+
+  ordered.forEach(k => {
+    const day = document.createElement('div');
+    day.className = 'day';
+
+    const [d, mon] = dayLabel(k).split(' ');
+    day.innerHTML = `<div class="daymark${k === today ? ' today' : ''}">`
+      + `<div class="d">${esc(d)}</div><div class="m">${esc(mon || '')}</div></div>`;
+
+    const card = document.createElement('div');
+    card.className = 'card tight';
+
+    if (k === playDay) {
+      toPlay.forEach(tie => card.appendChild(infoRow(
+        `${esc(tie.a)} v ${esc(tie.b)}`, 'Still to play',
+        '<span class="chip next">To play</span>', () => showDrawTab('draw'))));
+    }
+
+    sheets.filter(s => s.k === k).forEach(({ m, i }) => {
+      card.appendChild(infoRow(
+        `${esc(m.team1Name)} v ${esc(m.team2Name)}`,
+        (isDraw(m) ? 'Draw' : 'won by ' + esc(m.winner))
+          + (wentToSuddenDeath(m) ? ' &middot; sudden death' : ''),
+        `<span class="score">${m.team1Score}&ndash;${m.team2Score}</span>`,
+        () => showDetail(m, i)));
+    });
+
+    if (!card.children.length) {
+      const past = keyTime(k) < now;
+      card.innerHTML = `<div class="empty">${past ? 'No score sheets from this day' : 'Nothing yet'}</div>`;
+    }
+
+    day.appendChild(card);
+    box.appendChild(day);
+  });
+
+  // a tournament that has finished its days with ties still open
+  if (!playDay && toPlay.length) {
+    box.insertAdjacentHTML('beforeend', '<p class="eyebrow">Still to play</p>');
+    const card = document.createElement('div');
+    card.className = 'card tight';
+    toPlay.forEach(tie => card.appendChild(infoRow(
+      `${esc(tie.a)} v ${esc(tie.b)}`, '', '<span class="chip next">To play</span>',
+      () => showDrawTab('draw'))));
+    box.appendChild(card);
+  }
+}
+
+/* ---------------- the tournament's leaders ---------------- */
+
+let leadersBy = 'wickets';
+
+/**
+ * Attackers ranked by what the score sheets already hold: wickets taken, and how
+ * many of them were dives. Nothing extra is entered and nothing is estimated -
+ * these are counts. A jersey is only ever compared within its own team, since 5
+ * on one side is a different player from 5 on the other.
+ */
+function renderLeaders() {
+  const draw = openDraw();
+  const box = $('#ddLeadersView');
+
+  box.innerHTML = '';
+  if (!draw) return;
+
+  const keys = new Set(drawDates(draw).map(dateKey));
+  const stats = new Map();
+  let sheetsCounted = 0;
+
+  Matches.all().forEach(m => {
+    if (!keys.has(dateKey(m.date))) return;
+    if ((m.teamType || 'Men') !== draw.teamType || (m.category || 'Open') !== draw.category) return;
+
+    sheetsCounted++;
+
+    sheetRows(m).forEach(r => {
+      if (r.notOut || !r.attNo) return;
+
+      const team = wasTeam1Attacking(m, r.halfIndex) ? m.team1Name : m.team2Name;
+      const key = String(team).toLowerCase() + '|' + r.attNo;
+
+      const s = stats.get(key)
+        || { team, jersey: r.attNo, name: '', wickets: 0, dives: 0, games: new Set() };
+
+      s.wickets++;
+      if (r.type === 'Pole Dive' || r.type === 'Sky Dive') s.dives++;
+      if (!s.name && r.attName) s.name = r.attName;
+      s.games.add(m.id || (m.team1Name + m.team2Name + m.date));
+
+      stats.set(key, s);
+    });
+  });
+
+  const strip = document.createElement('div');
+  strip.className = 'strip';
+  [['wickets', 'Wickets'], ['dives', 'Dives']].forEach(([key, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.setAttribute('aria-pressed', String(leadersBy === key));
+    b.onclick = () => { leadersBy = key; renderLeaders(); };
+    strip.appendChild(b);
+  });
+  box.appendChild(strip);
+
+  if (!stats.size) {
+    box.insertAdjacentHTML('beforeend',
+      '<div class="card empty">No wickets recorded in this tournament yet. '
+      + 'Leaders appear as score sheets come in.</div>');
+    return;
+  }
+
+  const other = leadersBy === 'wickets' ? 'dives' : 'wickets';
+  const list = [...stats.values()]
+    .filter(s => s[leadersBy] > 0)
+    .sort((a, b) => b[leadersBy] - a[leadersBy] || b[other] - a[other]
+      || (a.name || a.jersey).localeCompare(b.name || b.jersey))
+    .slice(0, 10);
+
+  const card = document.createElement('div');
+  card.className = 'card tight';
+
+  if (!list.length) {
+    card.innerHTML = '<div class="empty">No dives recorded in this tournament yet</div>';
+  }
+
+  list.forEach((s, i) => {
+    const games = s.games.size;
+    const row = document.createElement('div');
+    row.className = 'listrow';
+    row.innerHTML = `<span class="rank">${i + 1}</span>`
+      + `<div class="grow"><div class="name">${esc(s.name || 'Jersey ' + s.jersey)}</div>`
+      + `<div class="meta">${esc(s.team)} &middot; jersey ${esc(s.jersey)} &middot; `
+      + `${s.wickets} ${s.wickets === 1 ? 'wicket' : 'wickets'}, ${s.dives} `
+      + `${s.dives === 1 ? 'dive' : 'dives'} in ${games} ${games === 1 ? 'match' : 'matches'}</div></div>`
+      + `<span class="score">${s[leadersBy]}</span>`;
+    card.appendChild(row);
+  });
+
+  box.appendChild(card);
+  box.insertAdjacentHTML('beforeend',
+    `<p class="muted" style="margin:0 4px">Counted from the ${sheetsCounted} score `
+    + `${sheetsCounted === 1 ? 'sheet' : 'sheets'} on this phone for this tournament.</p>`);
+}
 
 /** The draw being looked at, read fresh so edits are never made to a stale copy. */
 function openDraw() {
@@ -1683,17 +2194,39 @@ function renderGroups() {
     box.appendChild(groupCard(draw, group, gi, eligible, placed, guest)));
 }
 
+/**
+ * Played, won and lost for a team across the tournament's days, in its side and
+ * age group - the same matches the wins count has always used.
+ */
+function recordFor(draw, teamName) {
+  const days = new Set(drawDates(draw).map(dateKey));
+  const r = { p: 0, w: 0, l: 0 };
+
+  Matches.all().forEach(m => {
+    if (!days.has(dateKey(m.date))) return;
+    if ((m.teamType || 'Men') !== draw.teamType || (m.category || 'Open') !== draw.category) return;
+    if (!sameName(m.team1Name, teamName) && !sameName(m.team2Name, teamName)) return;
+
+    r.p++;
+    if (isDraw(m)) return;
+    if (sameName(m.winner, teamName)) r.w++; else r.l++;
+  });
+
+  return r;
+}
+
 function groupCard(draw, group, gi, eligible, placed, guest) {
   const card = document.createElement('div');
   card.className = 'card';
 
   const head = document.createElement('div');
-  head.className = 'listrow';
-  head.innerHTML = `<div class="grow"><h2 style="margin:0">${groupName(gi)}</h2></div>`;
+  head.className = 'grouphead';
+  head.innerHTML = `<h2>${groupName(gi)}</h2>`
+    + ((group.teams || []).length
+      ? '<div class="colhead" aria-hidden="true"><span>P</span><span>W</span><span>L</span></div>'
+      : '');
 
-  const kill = document.createElement('button');
-  kill.className = 'red';
-  kill.textContent = '🗑';
+  const kill = trashButton('Delete ' + groupName(gi));
   kill.onclick = async () => {
     if (await ask('Delete Group', `Delete ${groupName(gi)}?`, { yes: 'Delete' }) !== 'yes') return;
 
@@ -1712,7 +2245,7 @@ function groupCard(draw, group, gi, eligible, placed, guest) {
     const row = document.createElement('div');
     row.className = 'listrow';
 
-    const wins = winsFor(draw, name);
+    const rec = recordFor(draw, name);
 
     // ticking a team sends it through to the draw
     const tick = document.createElement('input');
@@ -1731,20 +2264,23 @@ function groupCard(draw, group, gi, eligible, placed, guest) {
       if (tick.checked) on.add(name); else on.delete(name);
 
       g.qualified = [...on];
-      saveOpenDraw(d);
+      if (saveOpenDraw(d)) renderGroups();
     };
 
     row.appendChild(tick);
 
-    // the tally sits out on the right, away from the name, and only appears
-    // once there is something to show
+    // played, won and lost sit out on the right, away from the name; won is the
+    // number a referee scans a group for, so it is the loud one
     row.insertAdjacentHTML('beforeend',
-      `<div class="grow">🔹 ${esc(name)}</div>`
-      + (wins ? `<span class="wins" title="Matches won">${wins}</span>` : ''));
+      `<div class="grow${tick.checked ? ' through' : ''}">${esc(name)}</div>`
+      + `<div class="pwl" title="Played ${rec.p}, won ${rec.w}, lost ${rec.l}">`
+      + `<span>${rec.p}</span><span class="${rec.w ? 'w' : ''}">${rec.w}</span><span>${rec.l}</span></div>`);
 
     const out = document.createElement('button');
-    out.className = 'red';
-    out.textContent = '✕';
+    out.className = 'iconbtn danger';
+    out.title = 'Take ' + name + ' out of the group';
+    out.setAttribute('aria-label', 'Take ' + name + ' out of the group');
+    out.innerHTML = '<svg><use href="#i-x"/></svg>';
     out.onclick = () => {
       const d = openDraw();
       if (!d) return;
@@ -1833,7 +2369,9 @@ function renderSheets() {
 
   $('#sheetTotal').textContent = q
     ? `Showing ${shown} of ${all.length}`
-    : `Total Matches : ${all.length}`;
+    : `${all.length} score ${all.length === 1 ? 'sheet' : 'sheets'}`;
+
+  renderSyncStrip('#sheetSync');
 
   if (!shown) {
     box.innerHTML = `<div class="card empty">${all.length
@@ -1843,24 +2381,26 @@ function renderSheets() {
   }
 
   groups.forEach((list, date) => {
+    box.insertAdjacentHTML('beforeend', `<p class="eyebrow">${esc(date)}</p>`);
+
     const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `<h2>📅 ${esc(date)}</h2>`;
+    card.className = 'card tight';
 
     list.forEach(m => {
       const draw = isDraw(m);
       const row = document.createElement('div');
       row.className = 'listrow';
       row.innerHTML = `<div class="grow pick">
-          <div class="name">${esc(m.team1Name)} vs ${esc(m.team2Name)}</div>
-          <div class="meta">${m.team1Score} - ${m.team2Score} • ${draw ? 'Draw' : '🏆 ' + esc(m.winner)}</div>
-        </div>`;
+          <div class="name">${esc(m.team1Name)} v ${esc(m.team2Name)}</div>
+          <div class="meta">${esc((m.teamType || 'Men') + ' ' + (m.category || 'Open'))} • `
+        + `${draw ? 'Draw' : 'won by ' + esc(m.winner)}`
+        + `${wentToSuddenDeath(m) ? ' • sudden death' : ''}</div>
+        </div>
+        <span class="score">${m.team1Score}&ndash;${m.team2Score}</span>`;
 
       row.querySelector('.grow').onclick = () => showDetail(m, m.__index);
 
-      const del = document.createElement('button');
-      del.className = 'red';
-      del.textContent = '🗑';
+      const del = trashButton(`Delete ${m.team1Name} v ${m.team2Name}`);
       del.onclick = async () => {
         if (await ask('Delete Match', `Delete ${m.team1Name} vs ${m.team2Name}?`, { yes: 'Delete' }) !== 'yes') return;
         const l = Matches.all();
@@ -1947,6 +2487,7 @@ function renderRoomList() {
       + `</div>`;
 
     const open = document.createElement('button');
+    open.className = 'grey';
     open.textContent = 'Open';
     open.onclick = () => showDraw(draw);
 
@@ -2017,14 +2558,7 @@ Cloud.restore();
 let ddTab = 'groups';
 
 function showShareTab() {
-  ddTab = 'share';
-  $('#ddGroupsView').style.display = 'none';
-  $('#ddDrawView').style.display = 'none';
-  $('#ddShareView').style.display = '';
-  $('#ddGroupsTab').className = 'grey';
-  $('#ddDrawTab').className = 'grey';
-  $('#ddShareTab').className = 'green';
-  renderShare();
+  showDrawTab('share');
 }
 
 $('#ddShareTab').onclick = showShareTab;
@@ -2068,7 +2602,10 @@ function renderShare() {
     return;
   }
 
-  if (hosting) $('#shCode').textContent = member.code;
+  if (hosting) {
+    $('#shCode').textContent = member.code;
+    drawQr($('#shQr'), joinLink(member.code));
+  }
 }
 
 /**
@@ -2093,6 +2630,8 @@ function renderDrawTabButtons(drawId) {
   $('#shStart').style.display = 'none';
   $('#shHost').style.display = 'none';
   $('#shCode').textContent = '';
+  $('#shQr').innerHTML = '';
+  $('#shQr').hidden = true;
 }
 
 /**
@@ -2165,8 +2704,48 @@ function setRefreshBusy(on) {
     const b = $(sel);
     if (!b) return;
     b.disabled = on;
-    b.textContent = on ? 'Refreshing…' : '↻ Refresh';
+    b.classList.toggle('busy', on);
+    b.setAttribute('aria-busy', on ? 'true' : 'false');
   });
+}
+
+/* ---------------- the join code as a QR square ----------------
+   Typing eight characters at a noisy ground is the likeliest way joining goes
+   wrong, so the host shows the join link as a square the other phone's camera
+   can read. The encoder is fetched only when a host opens this, and only ever
+   needs to work online - hosting does anyway. Without it the code still shows. */
+
+let qrLoading = null;
+
+function loadQr() {
+  if (window.qrcode) return Promise.resolve(window.qrcode);
+  if (qrLoading) return qrLoading;
+
+  qrLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = () => window.qrcode ? resolve(window.qrcode) : reject(new Error('qr'));
+    s.onerror = () => { qrLoading = null; reject(new Error('qr')); };
+    document.head.appendChild(s);
+  });
+
+  return qrLoading;
+}
+
+async function drawQr(box, text) {
+  if (!box) return;
+  box.hidden = true;
+
+  try {
+    const make = await loadQr();
+    const qr = make(0, 'M');
+    qr.addData(text);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, alt: 'Join code as a QR square' });
+    box.hidden = false;
+  } catch (e) {
+    box.hidden = true;   // no signal: the code below it still works
+  }
 }
 
 /* Settling the ties is part of saving a score sheet, on the host. Wrapping the
@@ -2434,7 +3013,10 @@ function roomEvent(event) {
     if (current === 'drawdetail') {
       if (ddTab === 'groups') renderGroups();
       else if (ddTab === 'draw') renderDrawTab();
+      else if (ddTab === 'days') renderDays();
+      else if (ddTab === 'leaders') renderLeaders();
     } else if (current === 'sheets') renderSheets();
+    else if (current === 'home') renderHome();
     else if (current === 'teams') renderTeams();
     else if (current === 'draws') renderDraws();
     return;

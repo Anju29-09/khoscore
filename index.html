@@ -6,10 +6,22 @@
 <meta name="theme-color" content="#0F172A">
 <title>KhoScore</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=29">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=29">
-<link rel="apple-touch-icon" href="icon-192.png?v=29">
-<link rel="stylesheet" href="styles.css?v=29">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=30">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png?v=30">
+<link rel="apple-touch-icon" href="icon-192.png?v=30">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap">
+<link rel="stylesheet" href="styles.css?v=30">
+<script>
+  // Sunlight is applied before the first paint, so it never flashes Night first
+  try {
+    if (localStorage.getItem('sunlight') === '1') {
+      document.documentElement.dataset.sun = 'on';
+      document.querySelector('meta[name=theme-color]').content = '#F4F7FB';
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -18,7 +30,7 @@
      bottom the way "from Meta" does. -->
 <div id="splash">
   <div class="splash-main">
-    <img src="icon-512.png?v=29" alt="" width="128" height="128">
+    <img src="icon-512.png?v=30" alt="" width="128" height="128">
     <div class="splash-name">KhoScore</div>
     <div class="splash-tag">Kho Kho Scoring</div>
   </div>
@@ -26,20 +38,55 @@
   <div class="splash-brand">AIngle</div>
 </div>
 
-<!-- ============ HOME ============ -->
-<section id="s-home" class="screen active">
-  <h1>Kho Kho</h1>
-  <p class="sub">Tournament Management System</p>
+<!-- ============ ICONS ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-home" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z"/></g></symbol>
+  <symbol id="i-teams" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="16.8" cy="9.5" r="2.5"/><path d="M15.8 14.2c2.4-.3 4.3 1.3 4.9 4.3"/></g></symbol>
+  <symbol id="i-draws" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h6v5H3M3 14h6v5H3M9 7.5h3v9H9M12 12h3"/><rect x="15" y="9.5" width="6" height="5" rx="1"/></g></symbol>
+  <symbol id="i-sheets" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4M9.5 12h5M9.5 15.5h5"/></g></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 18.5h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.4 9.1a4.7 4.7 0 0 0 .1 9.4z"/></g></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></g></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></g></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5.5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="18.5" r="1.7"/></g></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></g></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></g></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></g></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></g></symbol>
+</svg>
 
-  <div class="menu">
-    <button id="resumeBtn" class="amber" style="display:none">⏱ Resume Live Match</button>
-    <button data-go="register">🏃 Register Team</button>
-    <button data-go="teams">👥 Registered Teams</button>
-    <button data-go="draws">🗂 Draws</button>
-    <button id="startMatchBtn">🔥 Start Match</button>
-    <button data-go="sheets">📄 Score Sheets</button>
-    <button data-go="account">☁ Share Across Devices</button>
+<!-- ============ HOME: TODAY ============ -->
+<section id="s-home" class="screen active">
+  <header class="appbar">
+    <div class="brand">KhoScore</div>
+    <span class="spacer"></span>
+    <button class="iconbtn sunbtn" title="Sunlight mode" aria-label="Sunlight mode"><svg><use href="#i-sun"/></svg></button>
+    <button class="iconbtn" data-go="account" title="Share across devices" aria-label="Share across devices"><svg><use href="#i-cloud"/></svg></button>
+  </header>
+
+  <div class="syncstrip" id="syncStrip" hidden></div>
+
+  <!-- an unfinished match comes first, whenever there is one -->
+  <div class="livecard" id="homeLive" hidden>
+    <div class="liveflag"><span class="dot"></span> <span id="hlFlag">Match in progress</span></div>
+    <div class="tally">
+      <div class="side"><span class="crest" id="hlCode1"></span><span class="nm" id="hlName1"></span></div>
+      <span class="num" id="hlScore1">0</span><span class="sep">&ndash;</span><span class="num" id="hlScore2">0</span>
+      <div class="side right"><span class="crest" id="hlCode2"></span><span class="nm" id="hlName2"></span></div>
+    </div>
+    <div class="statusline"><span id="hlPhase"></span><span id="hlTime"></span></div>
+    <button id="resumeBtn" class="big">Resume scoring</button>
   </div>
+
+  <div id="homeToday"></div>
+
+  <div class="homeactions">
+    <button id="startMatchBtn" class="big">Start a match</button>
+    <div id="homeTournaments" class="homeactions" style="margin:0"></div>
+  </div>
+
+  <p class="eyebrow">On this phone</p>
+  <div class="card tight" id="homeCounts"></div>
 
   <p class="muted" id="installHint" style="display:none">
     Tip: use your browser's <b>Install</b> button to keep KhoScore on your desktop or home screen.
@@ -48,12 +95,14 @@
 
 <!-- ============ SHARE ACROSS DEVICES ============ -->
 <section id="s-account" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>☁ Share Across Devices</h1>
+  <header class="appbar">
+    <h1>Share across devices</h1>
+  </header>
 
   <div class="card" id="acSignedOut">
-    <h2>Sign in to host</h2>
-    <button id="acSignInBtn" class="green">Continue with Google</button>
+    <h2>Host a tournament</h2>
+    <p class="muted" style="margin:-6px 0 12px">Sign in to let other phones score into your tournament.</p>
+    <button id="acSignInBtn" class="big">Continue with Google</button>
   </div>
 
   <div class="card" id="acSignedIn" style="display:none">
@@ -63,7 +112,7 @@
         <div class="name" id="acEmail"></div>
       </div>
     </div>
-    <button id="acSignOutBtn" class="red">Sign out</button>
+    <button id="acSignOutBtn" class="danger">Sign out</button>
   </div>
 
   <div class="card">
@@ -72,7 +121,7 @@
       <input type="text" id="acJoinCode" placeholder="ABCD-EFGH"
              autocapitalize="characters" autocomplete="off" spellcheck="false">
     </div>
-    <button id="acJoinBtn" class="green">Join</button>
+    <button id="acJoinBtn" class="big">Join</button>
   </div>
 
   <div class="card" id="acRooms" style="display:none">
@@ -83,19 +132,21 @@
 
 <!-- ============ TEAM REGISTRATION ============ -->
 <section id="s-register" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1 id="regTitle">🏃 Team Registration</h1>
+  <header class="appbar">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1 id="regTitle">Register a team</h1>
+  </header>
 
-  <div class="row" style="margin-bottom:18px" id="regInviteRow">
-    <button id="inviteBtn" class="green">📨 Invite Team</button>
-    <button id="pasteBtn">📥 Paste Reply</button>
+  <div class="row" style="margin-bottom:14px" id="regInviteRow">
+    <button id="inviteBtn" class="grey">Invite a team</button>
+    <button id="pasteBtn" class="grey">Paste reply</button>
   </div>
 
   <div class="card">
-    <h2>Team Details</h2>
+    <h2>Team details</h2>
 
-    <div class="field"><input type="text" id="regTeam" placeholder="Enter Team Name"></div>
-    <div class="field"><input type="text" id="regCoach" placeholder="Enter Coach Name"></div>
+    <div class="field"><input type="text" id="regTeam" placeholder="Team name"></div>
+    <div class="field"><input type="text" id="regCoach" placeholder="Coach name"></div>
 
     <div class="field">
       <label class="cap">Type</label>
@@ -119,13 +170,15 @@
     <div id="playerInputs"></div>
   </div>
 
-  <button id="saveTeamBtn" class="green big">SAVE TEAM</button>
+  <button id="saveTeamBtn" class="big">Save team</button>
 </section>
 
-<!-- ============ REGISTERED TEAMS ============ -->
+<!-- ============ TEAMS ============ -->
 <section id="s-teams" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>📋 Registered Teams</h1>
+  <header class="appbar">
+    <h1>Teams</h1>
+    <button class="iconbtn" data-go="register" title="Register a team" aria-label="Register a team"><svg><use href="#i-plus"/></svg></button>
+  </header>
 
   <input type="search" id="teamSearch" placeholder="Search team or coach">
   <p class="muted" id="teamSearchInfo" style="display:none"></p>
@@ -133,29 +186,32 @@
   <div id="teamGroups"></div>
 </section>
 
-<!-- ============ TEAM DETAILS ============ -->
+<!-- ============ ONE TEAM ============ -->
 <section id="s-teamdetail" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1 id="tdName">Team</h1>
+  <header class="appbar">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1 id="tdName">Team</h1>
+    <button class="iconbtn" id="tdEditBtn" title="Edit team" aria-label="Edit team"><svg><use href="#i-edit"/></svg></button>
+  </header>
   <p class="sub" id="tdMeta"></p>
-  <button id="tdEditBtn" style="margin-bottom:14px">✏️ Edit Team</button>
-  <div class="card" id="tdPlayers"></div>
+  <div class="card tight" id="tdPlayers"></div>
 </section>
 
-<!-- ============ MATCH SELECTION ============ -->
+<!-- ============ START A MATCH ============ -->
 <section id="s-select" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>Match Selection</h1>
-  <p class="sub">Choose teams to start match</p>
+  <header class="appbar">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1>Start a match</h1>
+  </header>
 
   <div class="card">
-    <h2>Match Type</h2>
     <div class="field">
+      <label class="cap">Type</label>
       <label class="opt"><input type="radio" name="selType" value="Men" checked>Men</label>
       <label class="opt"><input type="radio" name="selType" value="Women">Women</label>
     </div>
-    <h2>Category</h2>
-    <div class="field">
+    <div class="field" style="margin-bottom:0">
+      <label class="cap">Category</label>
       <label class="opt"><input type="radio" name="selCat" value="U14">U14</label>
       <label class="opt"><input type="radio" name="selCat" value="U17">U17</label>
       <label class="opt"><input type="radio" name="selCat" value="U18">U18</label>
@@ -165,65 +221,66 @@
   </div>
 
   <div class="card">
-    <h2>Available Teams</h2>
+    <h2>Pick two teams</h2>
     <input type="search" id="selSearch" placeholder="Search team or coach">
-    <p class="muted" id="selInfo" style="margin-bottom:4px">Select 2 teams</p>
+    <p class="muted" id="selInfo" style="margin:0 0 4px">Select 2 teams</p>
     <div id="selList"></div>
   </div>
 
-  <button id="toTossBtn" class="big">Start Match</button>
+  <button id="toTossBtn" class="big">Next: toss</button>
 </section>
 
 <!-- ============ TOSS ============ -->
 <section id="s-toss" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>Toss Selection</h1>
-  <p class="sub">Configure match settings</p>
+  <header class="appbar">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1>Toss</h1>
+  </header>
 
   <div class="card">
     <div class="field">
-      <label class="cap">Match Date</label>
+      <label class="cap">Match date</label>
       <input type="date" id="tossDate">
     </div>
 
     <div class="field">
-      <label class="cap">Selected Teams</label>
+      <label class="cap">Teams</label>
       <div id="tossTeams" class="muted"></div>
     </div>
 
     <div class="field">
-      <label class="cap">Attacking Team</label>
+      <label class="cap">Attacking first</label>
       <div id="tossAttack"></div>
     </div>
 
     <div class="field">
-      <label class="cap">Match Type</label>
+      <label class="cap">Match type</label>
       <p class="muted" style="margin:0 0 8px">Sudden death is one half each, decided on the quicker first wicket.</p>
       <label class="opt"><input type="radio" name="matchKind" value="full" checked>Full Match</label>
       <label class="opt"><input type="radio" name="matchKind" value="sd">Sudden Death</label>
     </div>
 
     <div class="field">
-      <label class="cap">Attack Size</label>
+      <label class="cap">Attack size</label>
       <label class="opt"><input type="radio" name="attackSize" value="7">7 Players</label>
       <label class="opt"><input type="radio" name="attackSize" value="9" checked>9 Players</label>
     </div>
 
     <div class="field">
-      <label class="cap">Half Time</label>
+      <label class="cap">Half time</label>
       <label class="opt"><input type="radio" name="halfTime" value="5" checked>5 Minutes</label>
       <label class="opt"><input type="radio" name="halfTime" value="7">7 Minutes</label>
       <label class="opt"><input type="radio" name="halfTime" value="9">9 Minutes</label>
     </div>
 
     <div class="field">
-      <label class="cap">Points Per Wicket</label>
+      <label class="cap">Points per wicket</label>
       <label class="opt"><input type="radio" name="wicketPts" value="1" checked>1 Point</label>
       <label class="opt"><input type="radio" name="wicketPts" value="2">2 Points</label>
     </div>
 
     <div class="field">
-      <label class="cap">Dream Run (Defending Team)</label>
+      <label class="cap">Dream run (defending team)</label>
       <p class="muted" style="margin:0 0 8px">A batch that stays on the field this long starts earning bonus points.</p>
       <label class="opt"><input type="radio" name="dreamRun" value="0" checked>No</label>
       <label class="opt"><input type="radio" name="dreamRun" value="2">2 min</label>
@@ -231,8 +288,8 @@
       <label class="opt"><input type="radio" name="dreamRun" value="4">4 min</label>
     </div>
 
-    <div class="field" id="bonusField" style="display:none">
-      <label class="cap">Bonus Point Every</label>
+    <div class="field" id="bonusField" style="display:none;margin-bottom:0">
+      <label class="cap">Bonus point every</label>
       <label class="opt"><input type="radio" name="bonusEvery" value="30" checked>30 sec</label>
       <label class="opt"><input type="radio" name="bonusEvery" value="60">1 min</label>
       <label class="opt"><input type="radio" name="bonusEvery" value="90">1:30</label>
@@ -240,14 +297,16 @@
     </div>
   </div>
 
-  <button id="toPlayersBtn" class="green big">Next</button>
+  <button id="toPlayersBtn" class="big">Next</button>
 </section>
 
-<!-- ============ PLAYER SELECTION ============ -->
+<!-- ============ PERMANENT SUBS ============ -->
 <section id="s-players" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>Permanent Subs</h1>
-  <p class="sub">Optional — up to 3 per team. They sit out the whole match.</p>
+  <header class="appbar">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1>Permanent subs</h1>
+  </header>
+  <p class="sub">Optional &mdash; up to 3 per team. They sit out the whole match.</p>
 
   <div class="row">
     <div class="card">
@@ -260,25 +319,32 @@
     </div>
   </div>
 
-  <button id="toScoringBtn" class="green big">Start Scoring</button>
+  <button id="toScoringBtn" class="big">Start scoring</button>
 </section>
 
 <!-- ============ DRAWS ============ -->
 <section id="s-draws" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>🗂 Draws</h1>
+  <header class="appbar">
+    <h1>Draws</h1>
+    <button class="iconbtn" id="newDrawToggle" title="New tournament" aria-label="New tournament"><svg><use href="#i-plus"/></svg></button>
+  </header>
   <p class="sub" id="drawTotal">Total Draws : 0</p>
 
-  <div class="card">
-    <h2>New Draw</h2>
+  <div class="card" id="newDrawCard" hidden>
+    <h2>New tournament</h2>
+
+    <div class="field">
+      <label class="cap">Tournament</label>
+      <input type="text" id="drawName" placeholder="Tournament name">
+    </div>
 
     <div class="field">
       <label class="cap">Dates</label>
       <div class="row">
         <input type="date" id="drawDate">
-        <button id="addDateBtn">➕ Add Date</button>
+        <button id="addDateBtn" class="grey" style="flex:none">Add date</button>
       </div>
-      <div id="drawDateList" style="margin-top:8px"></div>
+      <div id="drawDateList" style="margin-top:10px"></div>
     </div>
 
     <div class="field">
@@ -296,30 +362,28 @@
       <label class="opt"><input type="radio" name="drawCat" value="Open" checked>Open</label>
     </div>
 
-    <div class="field">
-      <label class="cap">Tournament</label>
-      <input type="text" id="drawName" placeholder="Enter Tournament Name">
-    </div>
-
-    <button id="saveDrawBtn" class="green big">SAVE DRAW</button>
+    <button id="saveDrawBtn" class="big">Save tournament</button>
   </div>
 
   <div id="drawList"></div>
 </section>
 
-<!-- ============ ONE DRAW ============ -->
+<!-- ============ ONE TOURNAMENT ============ -->
 <section id="s-drawdetail" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1 id="ddName">Draw</h1>
+  <header class="appbar">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1 id="ddName">Draw</h1>
+    <button class="iconbtn" id="ddRefresh" title="Refresh from the other devices" aria-label="Refresh"><svg><use href="#i-refresh"/></svg></button>
+  </header>
   <p class="sub" id="ddMeta"></p>
 
-  <button id="ddRefresh" class="grey">↻ Refresh</button>
-
-  <div class="row" style="margin-bottom:16px">
-    <button id="ddGroupsTab" class="green">👥 Groups</button>
-    <button id="ddDrawTab" class="grey">🏆 Draw</button>
-    <button id="ddShareTab" class="grey">☁ Share</button>
-    <button id="ddLeaveTab" class="red" style="display:none">⬅ Leave</button>
+  <div class="strip" role="tablist">
+    <button id="ddGroupsTab" class="green">Groups</button>
+    <button id="ddDrawTab" class="grey">Draw</button>
+    <button id="ddDaysTab" class="grey">Days</button>
+    <button id="ddLeadersTab" class="grey">Leaders</button>
+    <button id="ddShareTab" class="grey">Share</button>
+    <button id="ddLeaveTab" class="red" style="display:none">Leave</button>
   </div>
 
   <div id="ddShareView" style="display:none">
@@ -327,68 +391,67 @@
     <!-- not shared yet, and this device is the owner -->
     <div class="card" id="shStart">
       <h2>Share this tournament</h2>
-      <button id="shCreateBtn" class="green">Open a room</button>
+      <p class="muted" style="margin:-6px 0 12px">Other phones join with a code and send their score sheets here.</p>
+      <button id="shCreateBtn" class="big">Open a room</button>
       <p class="muted" id="shNeedSignIn" style="display:none">
-        Sign in first, on <b>Share Across Devices</b>.
+        Sign in first, on <b>Share across devices</b>.
       </p>
     </div>
 
     <!-- hosting -->
-    <div class="card" id="shHost" style="display:none">
-      <h2>Your code</h2>
+    <div class="card" id="shHost" style="display:none;text-align:center">
+      <div class="liveflag" style="color:var(--good);justify-content:center"><span class="dot"></span> Hosting</div>
+      <p class="muted" style="margin:8px 0 0">Point the other phone's camera at this</p>
+      <div class="qr" id="shQr" hidden></div>
       <div class="roomcode" id="shCode">----&#8209;----</div>
       <div class="row">
-        <button id="shCopyBtn">📋 Copy code</button>
-        <button id="shLinkBtn">🔗 Send link</button>
+        <button id="shCopyBtn" class="grey">Copy code</button>
+        <button id="shLinkBtn" class="grey">Send link</button>
       </div>
       <div class="row" style="margin-top:10px">
-        <button id="shNewCodeBtn" class="amber">♻ New code</button>
-        <button id="shEndBtn" class="red">⛔ End session</button>
+        <button id="shNewCodeBtn" class="grey">New code</button>
+        <button id="shEndBtn" class="danger">End session</button>
       </div>
       <p class="muted" id="shStatus"></p>
     </div>
+    <p class="muted" style="margin:0 4px">A joined device never sees the code &mdash; only the host can pass it on.</p>
 
   </div>
 
   <div id="ddGroupsView">
-    <button id="ddAddGroupBtn" style="margin-bottom:14px">➕ Add Group</button>
     <div id="ddGroups"></div>
+    <button id="ddAddGroupBtn" class="grey big" style="margin-top:2px">Add a group</button>
   </div>
 
   <div id="ddDrawView" style="display:none"></div>
+  <div id="ddDaysView" style="display:none"></div>
+  <div id="ddLeadersView" style="display:none"></div>
 </section>
 
 <!-- ============ SCORING ============ -->
 <section id="s-scoring" class="screen">
-  <div class="spread">
-    <button class="red" id="scoringBackBtn">← Back</button>
-    <b id="inningText">1st Inning - 1st Half</b>
+  <div class="schead">
+    <div class="schead-top">
+      <button class="iconbtn" id="scoringBackBtn" title="Leave the match" aria-label="Leave the match"><svg><use href="#i-back"/></svg></button>
+      <div class="match" id="scMatchTitle"></div>
+      <button class="iconbtn sunbtn" title="Sunlight mode" aria-label="Sunlight mode"><svg><use href="#i-sun"/></svg></button>
+      <button class="iconbtn" id="scMoreBtn" title="Reset half, skip, finish" aria-label="More controls"><svg><use href="#i-more"/></svg></button>
+    </div>
+    <div class="phase" id="inningText">1st Inning - 1st Half</div>
+    <div class="timer" id="timerText">05:00</div>
+    <p class="muted" id="sdTarget" style="text-align:center;display:none;margin:-4px 0 8px"></p>
+    <div class="score">
+      <div id="sc1Box"><div class="who"><span id="sc1Name">Team 1</span> <span id="sc1Role"></span></div><div class="n" id="sc1">0</div></div>
+      <div id="sc2Box"><div class="who"><span id="sc2Name">Team 2</span> <span id="sc2Role"></span></div><div class="n" id="sc2">0</div></div>
+    </div>
   </div>
 
-  <p class="muted" id="permText" style="margin:8px 0 0"></p>
+  <div class="scbody">
+    <p class="muted" id="permText"></p>
 
-  <div class="timer" id="timerText">05:00</div>
-  <p class="muted" id="sdTarget" style="text-align:center;display:none"></p>
-
-  <div class="row" style="margin-top:12px">
-    <button id="startBtn" class="green">Start</button>
-    <button id="lapBtn">Lap</button>
-    <button id="undoBtn" class="orange">Undo</button>
-    <button id="resetHalfBtn" class="grey">Reset Half</button>
-    <button id="skipBtn" class="purple" style="display:none">Skip</button>
-    <button id="finishBtn" class="red" style="display:none">Finish</button>
-  </div>
-
-  <div class="score">
-    <div><div id="sc1Name">Team 1</div><div class="n" id="sc1">0</div></div>
-    <div><div id="sc2Name">Team 2</div><div class="n" id="sc2">0</div></div>
-  </div>
-
-  <div class="card">
-    <div class="spread" style="margin-bottom:10px">
-      <b style="color:var(--blue)" id="attLabel">Attacking</b>
-      <b style="color:var(--cyan)">Game Data</b>
-      <b style="color:var(--purple)" id="defLabel">Defending</b>
+    <div class="fieldhead">
+      <span id="attLabel">Attacking</span>
+      <span id="defLabel">Defending</span>
     </div>
 
     <div class="field3">
@@ -396,63 +459,96 @@
       <div id="gameData"></div>
       <div class="jerseys" id="defGrid"></div>
     </div>
+
+    <!-- keyboard help, shown only where there is a keyboard -->
+    <div class="deskonly">
+      <p class="muted" id="keyHelp">
+        <b>Space</b> start / pause / resume · <b>L</b> lap ·
+        <b>U</b> undo · <b>D</b> delete batch · <b>H</b> reset half · <b>S</b> skip · <b>F</b> finish · <b>Esc</b> clear<br>
+        <b>Jerseys.</b> <b>2</b>–<b>9</b> land on one key. <b>1</b> and <b>10</b>–<b>15</b>
+        take two — <b>01</b> for 1, <b>12</b> for 12 — landing on the second digit, no wait.
+        Batch running: first entry is the <b>attacker</b>, second is the <b>defender</b>,
+        then <b>1</b> Running · <b>2</b> Pole Dive · <b>3</b> Sky Dive · <b>4</b> Self Out.
+        Type <b>00</b> for no jersey (“-”).
+        <span id="buildStamp" style="opacity:.5"></span>
+      </p>
+    </div>
   </div>
 
-  <!-- keyboard help, shown only where there is a keyboard -->
-  <div class="deskonly">
-    <p class="muted" id="keyHelp">
-      <b>Space</b> start / pause / resume · <b>L</b> lap ·
-      <b>U</b> undo · <b>D</b> delete batch · <b>H</b> reset half · <b>S</b> skip · <b>F</b> finish · <b>Esc</b> clear<br>
-      <b>Jerseys.</b> <b>2</b>–<b>9</b> land on one key. <b>1</b> and <b>10</b>–<b>15</b>
-      take two — <b>01</b> for 1, <b>12</b> for 12 — landing on the second digit, no wait.
-      Batch running: first entry is the <b>attacker</b>, second is the <b>defender</b>,
-      then <b>1</b> Running · <b>2</b> Pole Dive · <b>3</b> Sky Dive · <b>4</b> Self Out.
-      Type <b>00</b> for no jersey (“-”).
-      <span id="buildStamp" style="opacity:.5"></span>
-    </p>
+  <!-- the three things pressed during play, where the thumb is -->
+  <div class="thumbbar">
+    <div class="inner">
+      <button id="finishNowBtn" hidden>Finish match</button>
+      <div class="thumbrow">
+        <button id="startBtn" class="green">Start</button>
+        <button id="lapBtn">Lap</button>
+      </div>
+      <div class="thumbrow">
+        <button id="undoBtn">&#8617; Undo last wicket</button>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- ============ SCORE SHEETS ============ -->
 <section id="s-sheets" class="screen">
-  <button class="grey" data-back>← Back</button>
-  <h1>Match Score Sheet</h1>
+  <header class="appbar">
+    <h1>Score sheets</h1>
+    <button class="iconbtn" id="sheetRefresh" title="Refresh from the other devices" aria-label="Refresh"><svg><use href="#i-refresh"/></svg></button>
+  </header>
   <p class="sub" id="sheetTotal">Total Matches : 0</p>
-
-  <button id="sheetRefresh" class="grey">↻ Refresh</button>
+  <div class="syncstrip" id="sheetSync" hidden></div>
 
   <input type="search" id="sheetSearch" placeholder="Search team, date or winner">
-  <div id="sheetList" style="margin-top:12px"></div>
+  <div id="sheetList"></div>
 </section>
 
-<!-- ============ MATCH DETAIL ============ -->
+<!-- ============ ONE MATCH ============ -->
 <section id="s-detail" class="screen">
-  <button class="grey noprint" data-back>← Back</button>
+  <header class="appbar noprint">
+    <button class="iconbtn" data-back title="Back" aria-label="Back"><svg><use href="#i-back"/></svg></button>
+    <h1 id="dtTitle">Team A vs Team B</h1>
+  </header>
 
-  <div class="card" style="text-align:center">
+  <div class="card dthead">
     <span class="badge" id="dtBadge">Open</span>
-    <h1 id="dtTitle" style="margin:10px 0 4px">Team A vs Team B</h1>
-    <p class="muted" id="dtDate"></p>
-    <h2 id="dtWinner" style="color:var(--green)"></h2>
-
-    <div class="score">
-      <div><div id="dt1Name"></div><div class="n" id="dt1"></div></div>
-      <div><div id="dt2Name"></div><div class="n" id="dt2"></div></div>
+    <div class="tally">
+      <div class="side"><span class="crest" id="dtCode1"></span><span class="nm" id="dt1Name"></span></div>
+      <span class="num" id="dt1"></span><span class="sep">&ndash;</span><span class="num" id="dt2"></span>
+      <div class="side right"><span class="crest" id="dtCode2"></span><span class="nm" id="dt2Name"></span></div>
     </div>
+    <h2 id="dtWinner" style="color:var(--good)"></h2>
+    <p class="muted" id="dtDate" style="margin:0"></p>
+  </div>
 
+  <div class="dtactions noprint">
+    <button id="cardBtn">Result card</button>
+    <button id="pdfBtn" class="grey">Save PDF</button>
+    <button id="shareBtn" class="grey">Share PDF</button>
+    <button id="printBtn" class="grey">Print</button>
+    <button id="editBtn" class="grey">Edit</button>
+  </div>
+
+  <div class="strip noprint" id="dtTabs">
+    <button data-pane="summary" aria-pressed="true">Summary</button>
+    <button data-pane="turns" aria-pressed="false">Turns</button>
+    <button data-pane="players" aria-pressed="false">Players</button>
+    <button data-pane="sheet" aria-pressed="false">Sheet</button>
+  </div>
+
+  <div class="dtpane" id="dtPaneSummary">
+    <div class="card" id="dtGlance"></div>
     <p class="muted" id="dtRules"></p>
+  </div>
 
-    <div class="row noprint" style="margin-top:14px">
-      <button id="printBtn">🖨 Print PDF</button>
-      <button id="pdfBtn" class="green">⬇ Download PDF</button>
-      <button id="shareBtn" class="purple">↗ Share PDF</button>
-      <button id="editBtn" class="amber">✏️ Edit</button>
-    </div>
+  <div class="dtpane" id="dtPaneTurns" hidden></div>
+  <div class="dtpane" id="dtPanePlayers" hidden></div>
 
+  <div class="dtpane" id="dtPaneSheet" hidden>
     <!-- correction panel, only while editing -->
-    <div id="editPanel" class="noprint" style="display:none;text-align:left;margin-top:16px">
+    <div class="card noprint" id="editPanel" style="display:none">
 
-      <h2 style="margin-bottom:10px">Edit Match</h2>
+      <h2 style="margin-bottom:10px">Edit match</h2>
       <p class="muted" style="margin-top:0">
         Tap any row in the table below to correct or delete that wicket.
       </p>
@@ -479,30 +575,41 @@
       </div>
 
       <div class="row">
-        <button id="edRecalcBtn" class="grey">↻ Recalculate scores from sheet</button>
+        <button id="edRecalcBtn" class="grey">Recalculate scores from sheet</button>
       </div>
 
       <div class="row" style="margin-top:10px">
-        <button id="edSaveBtn" class="green">Save Changes</button>
-        <button id="edCancelBtn" class="red">Cancel</button>
+        <button id="edSaveBtn">Save changes</button>
+        <button id="edCancelBtn" class="danger">Cancel</button>
       </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Match Data</h2>
-    <div style="overflow-x:auto"><table class="sheet" id="dtTable"></table></div>
+    <div class="card">
+      <h2>Match data</h2>
+      <div style="overflow-x:auto"><table class="sheet" id="dtTable"></table></div>
+    </div>
   </div>
 </section>
 
+<!-- ============ TAB BAR ============ -->
+<nav id="tabbar" aria-label="Sections">
+  <div class="tabs">
+    <button data-tab="home"><svg><use href="#i-home"/></svg>Today</button>
+    <button data-tab="teams"><svg><use href="#i-teams"/></svg>Teams</button>
+    <button data-tab="draws"><svg><use href="#i-draws"/></svg>Draws</button>
+    <button data-tab="sheets"><svg><use href="#i-sheets"/></svg>Sheets</button>
+    <button data-tab="account"><svg><use href="#i-cloud"/></svg>Share</button>
+  </div>
+</nav>
+
 <!-- ============ DIALOGS ============ -->
 <dialog id="dlgAttack">
-  <h2>Attack Type</h2>
+  <h2>Attack type</h2>
   <div class="attack">
-    <button data-type="Running">🏃<br>Running</button>
-    <button data-type="Pole Dive" class="purple">🤸<br>Pole Dive</button>
-    <button data-type="Sky Dive" class="green">🕊<br>Sky Dive</button>
-    <button data-type="Self Out" class="red">🚫<br>Self Out</button>
+    <button data-type="Running">Running</button>
+    <button data-type="Pole Dive">Pole Dive</button>
+    <button data-type="Sky Dive">Sky Dive</button>
+    <button data-type="Self Out">Self Out</button>
   </div>
   <div class="actions"><button class="grey" id="dlgAttackCancel">Cancel</button></div>
 </dialog>
@@ -573,6 +680,27 @@
   </div>
 </dialog>
 
+<dialog id="dlgMore">
+  <h2>Match controls</h2>
+  <p class="muted" style="margin:0">These end or rewind a half, so they are kept away from Lap.</p>
+  <div class="actions">
+    <button id="resetHalfBtn" class="grey">Reset this half</button>
+    <button id="skipBtn" class="grey" style="display:none">Skip this inning</button>
+    <button id="finishBtn" class="grey" style="display:none">Finish match</button>
+    <button id="moreClose" class="grey">Close</button>
+  </div>
+</dialog>
+
+<dialog id="dlgCard">
+  <h2>Result card</h2>
+  <img id="cardPreview" alt="The result as a picture">
+  <div class="actions">
+    <button id="cardClose" class="grey">Close</button>
+    <button id="cardSaveBtn" class="grey">Save image</button>
+    <button id="cardShareBtn">Share</button>
+  </div>
+</dialog>
+
 <dialog id="dlgChoice">
   <h2 id="chTitle">Choose</h2>
   <p id="chBody"></p>
@@ -581,13 +709,13 @@
 
 <div id="toast"></div>
 
-<script src="cloud.js?v=29"></script>
-<script src="share.js?v=29"></script>
-<script src="app.js?v=29"></script>
-<script src="scoring.js?v=29"></script>
-<script src="pdf.js?v=29"></script>
-<script src="detail.js?v=29"></script>
-<script src="room.js?v=29"></script>
+<script src="cloud.js?v=30"></script>
+<script src="share.js?v=30"></script>
+<script src="app.js?v=30"></script>
+<script src="scoring.js?v=30"></script>
+<script src="pdf.js?v=30"></script>
+<script src="detail.js?v=30"></script>
+<script src="room.js?v=30"></script>
 <script>
   // service worker gives the offline cache and makes the app installable
   /* ----------------------------------------------------------
@@ -687,7 +815,7 @@
 
   // so it is obvious at a glance whether the browser is running the newest files
   const stamp = document.getElementById('buildStamp');
-  if (stamp) stamp.textContent = ' — keys build v29';
+  if (stamp) stamp.textContent = ' — keys build v30';
 
   renderHome();
 

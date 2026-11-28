@@ -19,6 +19,9 @@ let detailIndex = null;
 
 let editing = false;
 
+/** Which of the four tabs on a match is showing. */
+let detailPane = 'summary';
+
 function halfTitle(m, i) {
   if (m.halfTitles && i < m.halfTitles.length && m.halfTitles[i]) return m.halfTitles[i];
   return ['1st Inning - 1st Half', '1st Inning - 2nd Half',
@@ -209,10 +212,344 @@ function rulesLine(m) {
   return s;
 }
 
+/* ============================================================
+   WHAT THE SHEET ALREADY KNOWS
+
+   Everything on the Summary, Turns and Players tabs is counted from the
+   wickets on the sheet. Nothing is entered for it and nothing is estimated.
+   ============================================================ */
+
+/** "Satara won by 6 points", "Sangli won in sudden death", or "Match drawn". */
+function resultLine(m) {
+  if (isDraw(m)) return 'Match drawn';
+  if (wentToSuddenDeath(m)) return m.winner + ' won in sudden death';
+
+  const margin = Math.abs((Number(m.team1Score) || 0) - (Number(m.team2Score) || 0));
+  return margin ? `${m.winner} won by ${margin} ${margin === 1 ? 'point' : 'points'}` : m.winner + ' won';
+}
+
+const isDive = type => type === 'Pole Dive' || type === 'Sky Dive';
+
+/** Per side: wickets taken attacking, how many were dives, dream run points defending. */
+function sideStats(m, rows) {
+  const st = [{ wickets: 0, dives: 0, dream: 0 }, { wickets: 0, dives: 0, dream: 0 }];
+
+  rows.forEach(r => {
+    if (r.notOut) return;
+    const att = wasTeam1Attacking(m, r.halfIndex) ? 0 : 1;
+    st[att].wickets++;
+    if (isDive(r.type)) st[att].dives++;
+  });
+
+  (m.allEvents || []).forEach((_, h) => {
+    const def = wasTeam1Attacking(m, h) ? 1 : 0;
+    st[def].dream += halfBonusOf(m, h);
+  });
+
+  return st;
+}
+
+function barRow(label, value, max, alt) {
+  const pct = Math.round((value / Math.max(1, max)) * 100);
+  return `<div class="barrow"><span class="lbl">${esc(label)}</span>`
+    + `<div class="bartrack"><div class="barfill${alt ? ' alt' : ''}" style="width:${pct}%"></div></div>`
+    + `<span class="v">${value}</span></div>`;
+}
+
+const NO_DATA = '<div class="empty">No ball-by-ball data recorded for this match</div>';
+
+function renderGlance(m, rows) {
+  const box = $('#dtGlance');
+
+  if (!rows.length) { box.innerHTML = NO_DATA; return; }
+
+  const st = sideStats(m, rows);
+  const names = [m.team1Name, m.team2Name];
+
+  const metric = (title, key) => {
+    const max = Math.max(st[0][key], st[1][key]);
+    return `<p class="eyebrow">${title}</p>`
+      + barRow(names[0], st[0][key], max, false)
+      + barRow(names[1], st[1][key], max, true);
+  };
+
+  let html = metric('Wickets taken', 'wickets') + metric('Of them, dives', 'dives');
+  if (st[0].dream || st[1].dream || m.dreamRunMinutes) html += metric('Dream run points', 'dream');
+
+  box.innerHTML = html;
+}
+
+/** Points per half, both sides, drawn to one scale - where the match was won. */
+function renderTurns(m, rows) {
+  const box = $('#dtPaneTurns');
+  const halves = (m.allEvents || []).length;
+
+  if (!halves) { box.innerHTML = '<div class="card">' + NO_DATA + '</div>'; return; }
+
+  const pts = m.wicketPoints || 1;
+  const per = [];
+
+  for (let h = 0; h < halves; h++) {
+    const t1Att = wasTeam1Attacking(m, h);
+    const outs = rows.filter(r => r.halfIndex === h && !r.notOut).length;
+    const bonus = halfBonusOf(m, h);
+    const scored = outs * pts;
+
+    per.push({ h, outs, bonus, t1Att, t1: t1Att ? scored : bonus, t2: t1Att ? bonus : scored });
+  }
+
+  const max = Math.max(1, ...per.map(p => Math.max(p.t1, p.t2)));
+
+  const colW = 66, padX = 8, padT = 20, padB = 26, H = 176;
+  const W = Math.max(300, padX * 2 + per.length * colW);
+  const plotH = H - padT - padB;
+  const base = H - padB;
+
+  let marks = `<line x1="${padX}" y1="${base}" x2="${W - padX}" y2="${base}" style="stroke:var(--line)" stroke-width="1"></line>`;
+
+  per.forEach((p, i) => {
+    const x0 = padX + i * colW + 13;
+
+    [[p.t1, 'var(--accent)'], [p.t2, 'var(--warn)']].forEach(([v, colour], k) => {
+      const hgt = Math.round((v / max) * plotH);
+      const x = x0 + k * 21;
+      if (hgt > 0) {
+        marks += `<rect x="${x}" y="${base - hgt}" width="17" height="${hgt}" rx="3" style="fill:${colour}"></rect>`;
+      }
+      marks += `<text x="${x + 8.5}" y="${base - hgt - 6}" text-anchor="middle" font-size="11" `
+        + `style="fill:var(--muted)">${v}</text>`;
+    });
+
+    marks += `<text x="${x0 + 19}" y="${H - 8}" text-anchor="middle" font-size="11" `
+      + `style="fill:var(--muted)">${esc(halfCode(m, p.h))}</text>`;
+  });
+
+  let html = '<div class="card"><p class="eyebrow">Points in each half</p>'
+    + `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W * 1.6}px;height:auto;display:block" `
+    + `role="img" aria-label="Points scored by each side in each half">${marks}</svg>`
+    + `<div class="legend"><span><i style="background:var(--accent)"></i>${esc(m.team1Name)}</span>`
+    + `<span><i style="background:var(--warn)"></i>${esc(m.team2Name)}</span></div></div>`;
+
+  html += '<div class="card tight">';
+  per.forEach(p => {
+    const attName = p.t1Att ? m.team1Name : m.team2Name;
+    const defName = p.t1Att ? m.team2Name : m.team1Name;
+    html += `<div class="listrow"><div class="grow"><div class="name">${esc(halfTitle(m, p.h))}</div>`
+      + `<div class="meta">${esc(attName)} attacking &middot; ${p.outs} ${p.outs === 1 ? 'wicket' : 'wickets'}`
+      + (p.bonus ? ` &middot; ${esc(defName)} dream run +${p.bonus}` : '') + `</div></div>`
+      + `<span class="score">${p.t1}&ndash;${p.t2}</span></div>`;
+  });
+  html += '</div>';
+
+  box.innerHTML = html;
+}
+
+/** Every attacker who took a wicket: how many, and how many of those were dives. */
+function renderPlayers(m, rows) {
+  const box = $('#dtPanePlayers');
+
+  if (!rows.length) { box.innerHTML = '<div class="card">' + NO_DATA + '</div>'; return; }
+
+  const sides = [new Map(), new Map()];
+
+  rows.forEach(r => {
+    if (r.notOut || !r.attNo) return;
+    const s = wasTeam1Attacking(m, r.halfIndex) ? 0 : 1;
+    const p = sides[s].get(r.attNo) || { jersey: r.attNo, name: '', wickets: 0, dives: 0 };
+    p.wickets++;
+    if (isDive(r.type)) p.dives++;
+    if (!p.name && r.attName) p.name = r.attName;
+    sides[s].set(r.attNo, p);
+  });
+
+  const max = Math.max(1, ...sides.flatMap(s => [...s.values()].map(p => p.wickets)));
+
+  let html = '';
+
+  [m.team1Name, m.team2Name].forEach((team, s) => {
+    const list = [...sides[s].values()].sort((a, b) =>
+      b.wickets - a.wickets || b.dives - a.dives || parseInt(a.jersey, 10) - parseInt(b.jersey, 10));
+
+    html += `<p class="eyebrow">${esc(team)} &middot; attacking</p><div class="card">`;
+
+    if (!list.length) html += '<div class="empty" style="padding:6px 0">No wicket credited to a player</div>';
+
+    list.forEach(p => {
+      const w = Math.round((p.wickets / max) * 100);
+      const d = p.wickets ? Math.round((p.dives / p.wickets) * 100) : 0;
+      html += `<div class="barrow"><span class="lbl">${esc(p.jersey)}. ${esc(p.name || 'Jersey ' + p.jersey)}</span>`
+        + `<div class="bartrack"><div class="barfill" style="width:${w}%">`
+        + `<div class="barfill alt" style="width:${d}%"></div></div></div>`
+        + `<span class="v">${p.wickets}</span></div>`;
+    });
+
+    html += '</div>';
+  });
+
+  html += '<div class="legend" style="margin:0 4px 14px"><span><i style="background:var(--accent)"></i>wickets</span>'
+    + '<span><i style="background:var(--warn)"></i>of them dives</span></div>';
+
+  box.innerHTML = html;
+}
+
+function showDetailPane(p) {
+  const panes = {
+    summary: '#dtPaneSummary', turns: '#dtPaneTurns',
+    players: '#dtPanePlayers', sheet: '#dtPaneSheet'
+  };
+
+  Object.entries(panes).forEach(([key, sel]) => { $(sel).hidden = key !== p; });
+  $$('#dtTabs [data-pane]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pane === p)));
+}
+
+$('#dtTabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-pane]');
+  if (!b) return;
+  detailPane = b.dataset.pane;
+  showDetailPane(detailPane);
+});
+
+/* ============================================================
+   THE RESULT CARD
+
+   One square picture per match - teams, score, margin, the tournament and the
+   date - for the WhatsApp group that is waiting for the result. Drawn here on a
+   canvas, so it needs nothing from the internet.
+   ============================================================ */
+
+/** The tournament this match belongs to, if one on this phone covers it. */
+function tournamentOf(m) {
+  const day = dateKey(m.date);
+  const d = Draws.all().find(x =>
+    (x.teamType || 'Men') === (m.teamType || 'Men')
+    && (x.category || 'Open') === (m.category || 'Open')
+    && drawDates(x).map(dateKey).includes(day));
+  return d ? d.tournament : '';
+}
+
+/** The largest size, up to start, at which text fits the width. */
+function fitFont(g, text, weight, family, start, min, width) {
+  let size = start;
+  for (; size > min; size -= 4) {
+    g.font = `${weight} ${size}px ${family}`;
+    if (g.measureText(text).width <= width) break;
+  }
+  g.font = `${weight} ${size}px ${family}`;
+  return size;
+}
+
+async function drawResultCard(m) {
+  const DISPLAY = '"Space Grotesk", Inter, system-ui, sans-serif';
+  const TEXT = 'Inter, system-ui, sans-serif';
+
+  try {
+    await Promise.all([
+      document.fonts.load(`700 64px "Space Grotesk"`),
+      document.fonts.load(`600 32px Inter`)
+    ]);
+  } catch (e) { /* offline and never loaded: the fallbacks still read well */ }
+
+  const S = 1080, P = 92;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const g = c.getContext('2d');
+
+  const ground = g.createLinearGradient(0, 0, S, S);
+  ground.addColorStop(0, '#0F172A');
+  ground.addColorStop(0.62, '#1E3A8A');
+  ground.addColorStop(1, '#0E7490');
+  g.fillStyle = ground;
+  g.fillRect(0, 0, S, S);
+
+  // the tournament, or the side and age group when it belongs to none
+  const kicker = (tournamentOf(m) || ((m.teamType || 'Men') + ' ' + (m.category || 'Open'))).toUpperCase();
+  g.fillStyle = 'rgba(255,255,255,.72)';
+  g.textAlign = 'left';
+  fitFont(g, kicker, 700, TEXT, 34, 22, S - P * 2);
+  g.fillText(kicker, P, 160);
+
+  const rowsY = [430, 640];
+  [[m.team1Name, m.team1Score], [m.team2Name, m.team2Score]].forEach(([name, score], i) => {
+    const won = !isDraw(m) && m.winner === name;
+    g.fillStyle = won ? '#FFFFFF' : 'rgba(255,255,255,.7)';
+    g.textAlign = 'left';
+    fitFont(g, name, 700, DISPLAY, 92, 44, S - P * 2 - 300);
+    g.fillText(name, P, rowsY[i]);
+
+    g.textAlign = 'right';
+    g.font = `700 170px ${DISPLAY}`;
+    g.fillText(String(score), S - P, rowsY[i] + 30);
+  });
+
+  g.fillStyle = 'rgba(255,255,255,.18)';
+  g.fillRect(P, 520, S - P * 2, 2);
+
+  g.textAlign = 'left';
+  g.fillStyle = '#67E8F9';
+  fitFont(g, resultLine(m), 700, TEXT, 44, 28, S - P * 2);
+  g.fillText(resultLine(m), P, 800);
+
+  g.fillStyle = 'rgba(255,255,255,.7)';
+  g.font = `500 32px ${TEXT}`;
+  g.fillText(m.date || '', P, 858);
+
+  g.fillStyle = 'rgba(255,255,255,.9)';
+  g.font = `700 42px ${DISPLAY}`;
+  g.fillText('KhoScore', P, S - P);
+
+  g.textAlign = 'right';
+  g.fillStyle = 'rgba(255,255,255,.55)';
+  g.font = `500 28px ${TEXT}`;
+  g.fillText('Kho Kho scoring', S - P, S - P);
+
+  return c;
+}
+
+let cardBlob = null;
+
+const cardName = m => exportName(m, 'png').replace(/^Scoresheet_/, 'Result_');
+
+$('#cardBtn').onclick = async () => {
+  if (!detailMatch) return;
+
+  const c = await drawResultCard(detailMatch);
+  $('#cardPreview').src = c.toDataURL('image/png');
+  cardBlob = await new Promise(res => c.toBlob(res, 'image/png'));
+
+  $('#dlgCard').showModal();
+};
+
+$('#cardClose').onclick = () => $('#dlgCard').close();
+
+$('#cardSaveBtn').onclick = () => {
+  if (!cardBlob || !detailMatch) return;
+  download(cardName(detailMatch), cardBlob, 'image/png');
+  toast('Image saved');
+};
+
+$('#cardShareBtn').onclick = async () => {
+  if (!cardBlob || !detailMatch) return;
+
+  const m = detailMatch;
+  const file = new File([cardBlob], cardName(m), { type: 'image/png' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: `${m.team1Name} v ${m.team2Name}`, text: resultLine(m) });
+      return;
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+
+  // no picture sharing here: save it, so it can be attached by hand
+  download(file.name, file, 'image/png');
+  toast('Image saved - attach it to share', 4000);
+};
+
 function showDetail(m, index) {
   detailMatch = m;
-  detailIndex = (typeof index === 'number') ? index : null;
+  detailIndex = (typeof index === 'number' && index >= 0) ? index : null;
   editing = false;
+  detailPane = 'summary';
   renderDetail();
   go('detail');
 }
@@ -229,13 +566,15 @@ function renderDetail() {
   badge.textContent = m.teamType ? m.teamType + ' • ' + cat : cat;
   badge.style.background = CAT_COLOURS[cat.toUpperCase()] || '#059669';
 
-  $('#dtTitle').textContent = `${m.team1Name} vs ${m.team2Name}`;
+  $('#dtTitle').textContent = `${m.team1Name} v ${m.team2Name}`;
+  $('#dtCode1').textContent = teamCode(m.team1Name);
+  $('#dtCode2').textContent = teamCode(m.team2Name);
   $('#dtDate').textContent = (m.date || 'No Date')
     + (m.minutesPerHalf ? `  •  ${m.minutesPerHalf} min halves` : '');
 
   const w = $('#dtWinner');
-  w.textContent = draw ? '🤝 Match Draw' : '🏆 Winner: ' + m.winner;
-  w.style.color = draw ? 'var(--yellow)' : 'var(--green)';
+  w.textContent = resultLine(m);
+  w.style.color = draw ? 'var(--warn)' : 'var(--good)';
 
   $('#dt1Name').textContent = m.team1Name;
   $('#dt2Name').textContent = m.team2Name;
@@ -286,7 +625,15 @@ function renderDetail() {
 
   $('#editBtn').style.display = detailIndex === null ? 'none' : '';
   $('#editPanel').style.display = editing ? '' : 'none';
-  $('#editBtn').textContent = editing ? '✏️ Editing…' : '✏️ Edit';
+  $('#editBtn').textContent = editing ? 'Cancel edit' : 'Edit';
+
+  renderGlance(m, rows);
+  renderTurns(m, rows);
+  renderPlayers(m, rows);
+
+  // corrections are made on the sheet itself, so editing opens it
+  if (editing) detailPane = 'sheet';   // and it stays there after the save
+  showDetailPane(detailPane);
 }
 
 /* ============================================================

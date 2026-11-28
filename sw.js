@@ -6,13 +6,13 @@
  * only sends SKIP_WAITING when the user accepts, so a match in progress is never
  * reloaded out from under the scorer.
  */
-const CACHE = 'khoscore-v29';
+const CACHE = 'khoscore-v30';
 
 const ASSETS = [
-  './', './index.html', './styles.css?v=29',
-  './share.js?v=29', './app.js?v=29', './scoring.js?v=29', './detail.js?v=29', './pdf.js?v=29',
-  './cloud.js?v=29', './room.js?v=29',
-  './manifest.webmanifest', './icon-192.png?v=29', './icon-512.png?v=29', './icon-maskable.png?v=29'
+  './', './index.html', './styles.css?v=30',
+  './share.js?v=30', './app.js?v=30', './scoring.js?v=30', './detail.js?v=30', './pdf.js?v=30',
+  './cloud.js?v=30', './room.js?v=30',
+  './manifest.webmanifest', './icon-192.png?v=30', './icon-512.png?v=30', './icon-maskable.png?v=30'
 ];
 
 self.addEventListener('install', e => {

@@ -197,6 +197,7 @@ const Scoring = (() => {
     M.timeLeft = M.totalTime;
     M.lastWicketTime = 0;
     M.currentLapTime = 0;
+    M.finishReady = false;   // a new, reset or skipped half is never the end
     releaseWake();
     renderTimer();
   }
@@ -254,6 +255,7 @@ const Scoring = (() => {
   /* ---------------- rendering ---------------- */
 
   function renderAll() {
+    $('#scMatchTitle').textContent = M.team1.teamName + ' v ' + M.team2.teamName;
     $('#sc1Name').textContent = M.team1.teamName;
     $('#sc2Name').textContent = M.team2.teamName;
     renderScore();
@@ -284,14 +286,30 @@ const Scoring = (() => {
     }
 
     $('#undoBtn').disabled = !M.undoStack.length;
+    renderFinishReady();
+  }
+
+  /**
+   * Finish lives behind the menu while a match is being played, a long way
+   * from Lap. Once the last half is over it is the only thing left to do, so it
+   * comes out and sits where the thumb is.
+   */
+  function renderFinishReady() {
+    const b = $('#finishNowBtn');
+    if (!b || !M) return;
+    b.hidden = !(M.sdWinner || M.finishReady);
   }
 
   function renderPhase() {
     $('#inningText').textContent = phaseTitle(M.currentPhase);
-    $('#attLabel').textContent = 'Attacking\n' + attackingName();
-    $('#defLabel').textContent = 'Defending\n' + defendingName();
-    $('#attLabel').style.whiteSpace = 'pre-line';
-    $('#defLabel').style.whiteSpace = 'pre-line';
+    $('#attLabel').textContent = 'Attacking · ' + attackingName();
+    $('#defLabel').textContent = 'Defending · ' + defendingName();
+
+    // the attacking side's score is outlined, so the head says who is chasing
+    $('#sc1Box').classList.toggle('atk', M.isTeam1Attacking);
+    $('#sc2Box').classList.toggle('atk', !M.isTeam1Attacking);
+    $('#sc1Role').textContent = M.isTeam1Attacking ? '· attacking' : '· defending';
+    $('#sc2Role').textContent = M.isTeam1Attacking ? '· defending' : '· attacking';
 
     const sd = $('#sdTarget');
     if (M.currentPhase === 8) {
@@ -304,6 +322,7 @@ const Scoring = (() => {
     const canFinish = [2, 4, 6, 8].includes(M.currentPhase);
     $('#finishBtn').style.display = canFinish ? '' : 'none';
     $('#skipBtn').style.display = M.currentPhase === 3 ? '' : 'none';
+    renderFinishReady();
   }
 
   function renderPerm() {
@@ -561,6 +580,8 @@ const Scoring = (() => {
     // a self out, or an attacker left as '-', both credit nobody
     const attacker = (type === 'Self Out' || !selAttacker) ? '-' : selAttacker;
     const event = selDefender + '-by-' + attacker;
+    const outDefender = selDefender;
+    let note = '';
 
     const lap = M.currentLapTime;
 
@@ -624,14 +645,14 @@ const Scoring = (() => {
 
         if (repeatCycle()) {
           cloned = 3;
-          toast('New Cycle - same batches again');
+          note = 'New cycle - same batches again';
         } else {
           M.currentBatchIndex = M.batches.length;
-          toast('New Cycle - pick the next 3 defenders');
+          note = 'New cycle - pick the next 3 defenders';
         }
 
       } else {
-        toast('Next Batch');
+        note = 'Next batch';
       }
 
       // The batch now on the field starts its own Dream Run clock from the moment
@@ -658,6 +679,12 @@ const Scoring = (() => {
 
     renderTimer();
     saveDraft();
+
+    // say what was just recorded, with the way back right beside it, so a scorer
+    // looking up from the field knows the tap landed - and can take it back
+    const by = attacker === '-' ? '' : ' by ' + attacker;
+    toast(`Wicket: ${outDefender}${by} · ${type}` + (note ? '  ·  ' + note : ''), 4500,
+          { label: 'Undo', run: () => { if (M) undoLast(); } });
   }
 
   /* ---------------- undo / delete / reset ---------------- */
@@ -872,6 +899,7 @@ const Scoring = (() => {
 
   function readyToFinish() {
     toast('Match Ready to Finish');
+    M.finishReady = true;
     renderPhase();
     $('#finishBtn').style.display = '';
     saveDraft();
@@ -1004,6 +1032,19 @@ const Scoring = (() => {
   $('#resetHalfBtn').onclick = () => M && resetHalf();
   $('#finishBtn').onclick = () => M && confirmFinish();
   $('#scoringBackBtn').onclick = () => M ? confirmExit() : go('home');
+
+  // Reset Half, Skip and Finish live in the menu, away from Lap
+  $('#scMoreBtn').onclick = () => { if (M) $('#dlgMore').showModal(); };
+  $('#moreClose').onclick = () => $('#dlgMore').close();
+
+  // the menu closes first, so the question each one asks is the only box open
+  ['#resetHalfBtn', '#skipBtn', '#finishBtn'].forEach(sel =>
+    $(sel).addEventListener('click', () => {
+      const d = $('#dlgMore');
+      if (d.open) d.close();
+    }, true));
+
+  $('#finishNowBtn').onclick = () => M && confirmFinish();
 
   $('#skipBtn').onclick = async () => {
     if (!M) return;
